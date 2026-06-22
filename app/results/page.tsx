@@ -761,55 +761,66 @@ function BetVisionPage() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load fantasy account when user changes
-  useEffect(() => {
-    if (!user) { setAccount(null); setBets([]); return }
-
-    async function loadAccount() {
-      // Try to fetch existing account
+  // Standalone loadAccount — called directly after login AND via useEffect on page load
+  const loadAccount = async (u: any) => {
+    try {
       const { data, error } = await supabase
         .from('fantasy_accounts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', u.id)
         .single()
 
       if (data) {
         setAccount(data)
       } else if (error?.code === 'PGRST116') {
-        // Row not found — create a new fantasy account with $20 starting balance
-        const { data: created } = await supabase
+        // No account yet — create one with $20 starting balance
+        const { data: created, error: createErr } = await supabase
           .from('fantasy_accounts')
           .insert({
-            user_id: user.id,
+            user_id: u.id,
             balance: 20,
             total_wagered: 0,
             total_won: 0,
-            display_name: user.user_metadata?.full_name ?? user.email ?? 'Player',
-            avatar_url: user.user_metadata?.avatar_url ?? '',
+            display_name: u.user_metadata?.full_name ?? u.email ?? 'Player',
+            avatar_url: u.user_metadata?.avatar_url ?? '',
           })
           .select()
           .single()
         if (created) setAccount(created)
+        else console.error('Failed to create account:', createErr)
+      } else {
+        console.error('Failed to load account:', error)
       }
+    } catch (e) {
+      console.error('loadAccount error:', e)
     }
 
-    loadAccount()
-    supabase.from('fantasy_bets').select('*').eq('user_id', user.id)
+    const { data: betsData } = await supabase
+      .from('fantasy_bets')
+      .select('*')
+      .eq('user_id', u.id)
       .order('created_at', { ascending: false })
-      .then(({ data }) => data && setBets(data as FantasyBet[]))
+    if (betsData) setBets(betsData as FantasyBet[])
+  }
+
+  // Load account on page load if already logged in
+  useEffect(() => {
+    if (!user) { setAccount(null); setBets([]); return }
+    loadAccount(user)
   }, [user])
 
-  // After account loads, open the bet modal if user had clicked Place Bet before logging in
+  // After account loads, open the pending bet modal
   useEffect(() => {
     if (!account || !pendingBetAdvice) return
     setActiveBetAdvice(pendingBetAdvice)
     setPendingBetAdvice(null)
   }, [account])
 
-  const handleLoginSuccess = (loggedInUser: any) => {
-    setUser(loggedInUser)
+  const handleLoginSuccess = async (loggedInUser: any) => {
     setShowLogin(false)
-    // pendingBetAdvice will be opened by the useEffect above once account loads
+    setUser(loggedInUser)
+    // Call directly so we don't wait on useEffect timing
+    await loadAccount(loggedInUser)
   }
 
   const handleSignOut = async () => {
