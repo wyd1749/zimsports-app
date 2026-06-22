@@ -171,7 +171,7 @@ function PredictionsPage() {
               AI Predictions
             </h1>
             <p className="text-sm text-muted-foreground">
-              {LEAGUE_LABELS[leagueId] ?? leagueId} · Groq-powered match outcome predictions
+              {LEAGUE_LABELS[leagueId] ?? leagueId} · AI-powered match outcome predictions
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchAndPredict} disabled={loading}>
