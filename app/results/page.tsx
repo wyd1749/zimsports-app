@@ -115,26 +115,37 @@ function ConfidenceBar({ value }: { value: number }) {
   )
 }
 
-// ─── Magic Link Login Modal ───────────────────────────────────────────────────
-function LoginModal({ onClose }: { onClose: () => void }) {
+// ─── Email + Password Login / Sign Up Modal ───────────────────────────────────
+function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (user: any) => void }) {
+  const [mode, setMode] = useState<'login' | 'signup'>('signup')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
 
-  const handleMagicLink = async () => {
+  const handleSubmit = async () => {
     if (!email.trim()) return setError('Please enter your email.')
+    if (password.length < 6) return setError('Password must be at least 6 characters.')
     setError('')
     setLoading(true)
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
-      },
-    })
-    setLoading(false)
-    if (err) return setError(err.message)
-    setSent(true)
+
+    if (mode === 'signup') {
+      const { data, error: err } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      })
+      setLoading(false)
+      if (err) return setError(err.message)
+      if (data.user) onSuccess(data.user)
+    } else {
+      const { data, error: err } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
+      setLoading(false)
+      if (err) return setError(err.message)
+      if (data.user) onSuccess(data.user)
+    }
   }
 
   return (
@@ -148,63 +159,63 @@ function LoginModal({ onClose }: { onClose: () => void }) {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20">
             <Gamepad2 className="h-7 w-7 text-primary" />
           </div>
-          <h2 className="text-lg font-bold">Join Fantasy Betting</h2>
+          <h2 className="text-lg font-bold">
+            {mode === 'signup' ? 'Join Fantasy Betting' : 'Welcome Back'}
+          </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Start with <span className="text-primary font-semibold">$20 virtual cash</span> — no real money needed
+            {mode === 'signup'
+              ? <>Start with <span className="text-primary font-semibold">$20 virtual cash</span> — no real money needed</>
+              : 'Sign in to continue placing bets'}
           </p>
         </div>
 
-        {sent ? (
-          <div className="text-center py-4">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
-              <Zap className="h-6 w-6 text-green-400" />
-            </div>
-            <h3 className="font-bold text-base mb-1">Check your email!</h3>
-            <p className="text-sm text-muted-foreground">
-              We sent a magic link to <span className="text-foreground font-medium">{email}</span>. Click it to sign in instantly — no password needed.
-            </p>
-            <button
-              onClick={() => { setSent(false); setEmail('') }}
-              className="mt-4 text-xs text-primary underline underline-offset-2"
-            >
-              Use a different email
-            </button>
+        {mode === 'signup' && (
+          <div className="space-y-2 mb-5">
+            {['$20 free virtual balance to start', 'Place bets on live odds', 'Track your P&L dashboard', 'Compete with no risk'].map((f, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm text-foreground">
+                <span className="text-primary font-bold">✓</span> {f}
+              </div>
+            ))}
           </div>
-        ) : (
-          <>
-            <div className="space-y-3 mb-5">
-              {['$20 free virtual balance to start', 'Place bets on live odds', 'Track your P&L dashboard', 'Compete with no risk'].map((f, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm text-foreground">
-                  <span className="text-primary font-bold">✓</span> {f}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-3">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={e => { setEmail(e.target.value); setError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleMagicLink()}
-                className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
-              />
-              {error && <p className="text-xs text-destructive">{error}</p>}
-              <Button
-                onClick={handleMagicLink}
-                disabled={loading}
-                className="w-full gap-2 font-semibold"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Send Magic Link
-              </Button>
-            </div>
-
-            <p className="text-center text-[11px] text-muted-foreground mt-3">
-              Free to play · Virtual money only · No deposits
-            </p>
-          </>
         )}
+
+        <div className="space-y-3">
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => { setEmail(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
+          />
+          <input
+            type="password"
+            placeholder="Password (min 6 characters)"
+            value={password}
+            onChange={e => { setPassword(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button onClick={handleSubmit} disabled={loading} className="w-full gap-2 font-semibold">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+            {mode === 'signup' ? 'Create Account' : 'Sign In'}
+          </Button>
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          {mode === 'signup' ? 'Already have an account?' : "Don't have an account?"}{' '}
+          <button
+            onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError('') }}
+            className="text-primary underline underline-offset-2"
+          >
+            {mode === 'signup' ? 'Sign in' : 'Sign up'}
+          </button>
+        </p>
+
+        <p className="text-center text-[11px] text-muted-foreground mt-2">
+          Free to play · Virtual money only · No deposits
+        </p>
       </div>
     </div>
   )
@@ -735,6 +746,7 @@ function BetVisionPage() {
   const [showLogin, setShowLogin] = useState(false)
   const [showDashboard, setShowDashboard] = useState(false)
   const [activeBetAdvice, setActiveBetAdvice] = useState<BetAdvice | null>(null)
+  const [pendingBetAdvice, setPendingBetAdvice] = useState<BetAdvice | null>(null)
 
   // ── FIX: use getSession() so the cookie written by /auth/callback is picked up ──
   useEffect(() => {
@@ -787,15 +799,18 @@ function BetVisionPage() {
       .then(({ data }) => data && setBets(data as FantasyBet[]))
   }, [user])
 
-  // After account loads, restore any pending bet from before magic link login
+  // After account loads, open the bet modal if user had clicked Place Bet before logging in
   useEffect(() => {
-    if (!account) return
-    const pending = sessionStorage.getItem('pendingBetAdvice')
-    if (pending) {
-      sessionStorage.removeItem('pendingBetAdvice')
-      try { setActiveBetAdvice(JSON.parse(pending)) } catch {}
-    }
+    if (!account || !pendingBetAdvice) return
+    setActiveBetAdvice(pendingBetAdvice)
+    setPendingBetAdvice(null)
   }, [account])
+
+  const handleLoginSuccess = (loggedInUser: any) => {
+    setUser(loggedInUser)
+    setShowLogin(false)
+    // pendingBetAdvice will be opened by the useEffect above once account loads
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -807,7 +822,7 @@ function BetVisionPage() {
 
   const handleFantasyBet = (advice: BetAdvice) => {
     if (!user) {
-      sessionStorage.setItem('pendingBetAdvice', JSON.stringify(advice))
+      setPendingBetAdvice(advice)
       setShowLogin(true)
       return
     }
@@ -1012,7 +1027,7 @@ function BetVisionPage() {
       </main>
 
       {/* Modals */}
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onSuccess={handleLoginSuccess} />}
       {activeBetAdvice && !account && user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-background p-8 shadow-2xl">
