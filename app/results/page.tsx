@@ -288,15 +288,16 @@ function BetModal({
       const newBalance = parseFloat((balance - stakeNum).toFixed(2))
       const { error: accErr } = await supabase
         .from('fantasy_accounts')
-        .update({
-          balance: newBalance,
-          total_wagered: supabase.rpc ? undefined : undefined, // handled below
-        })
+        .update({ balance: newBalance })
         .eq('user_id', user.id)
       if (accErr) throw accErr
 
-      // Increment total_wagered via rpc or manual fetch
-      await supabase.rpc('increment_wagered', { uid: user.id, amount: stakeNum }).catch(() => {})
+      // Increment total_wagered via rpc (silently ignore if function doesn't exist)
+      try {
+        await supabase.rpc('increment_wagered', { uid: user.id, amount: stakeNum })
+      } catch {
+        // rpc not available — ignore
+      }
 
       setSuccess(true)
       onBetPlaced(newBalance)
