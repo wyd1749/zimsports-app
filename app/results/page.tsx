@@ -779,13 +779,6 @@ function BetVisionPage() {
           .single()
         if (created) setAccount(created)
       }
-
-      // Restore pending bet advice saved before magic link login
-      const pending = sessionStorage.getItem('pendingBetAdvice')
-      if (pending) {
-        sessionStorage.removeItem('pendingBetAdvice')
-        try { setActiveBetAdvice(JSON.parse(pending)) } catch {}
-      }
     }
 
     loadAccount()
@@ -793,6 +786,16 @@ function BetVisionPage() {
       .order('created_at', { ascending: false })
       .then(({ data }) => data && setBets(data as FantasyBet[]))
   }, [user])
+
+  // After account loads, restore any pending bet from before magic link login
+  useEffect(() => {
+    if (!account) return
+    const pending = sessionStorage.getItem('pendingBetAdvice')
+    if (pending) {
+      sessionStorage.removeItem('pendingBetAdvice')
+      try { setActiveBetAdvice(JSON.parse(pending)) } catch {}
+    }
+  }, [account])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
