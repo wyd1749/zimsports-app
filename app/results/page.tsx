@@ -744,6 +744,14 @@ function BetVisionPage() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      // After login via magic link, restore any pending bet advice
+      if (session?.user) {
+        const pending = sessionStorage.getItem('pendingBetAdvice')
+        if (pending) {
+          sessionStorage.removeItem('pendingBetAdvice')
+          try { setActiveBetAdvice(JSON.parse(pending)) } catch {}
+        }
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -796,9 +804,12 @@ function BetVisionPage() {
   }
 
   const handleFantasyBet = (advice: BetAdvice) => {
-    if (!user) { setShowLogin(true); return }
-    // Account may still be loading after OAuth redirect — set the advice
-    // regardless; the modal condition below handles the wait gracefully.
+    if (!user) {
+      // Save the bet advice so we can restore it after magic link redirect
+      sessionStorage.setItem('pendingBetAdvice', JSON.stringify(advice))
+      setShowLogin(true)
+      return
+    }
     setActiveBetAdvice(advice)
   }
 
