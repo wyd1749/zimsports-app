@@ -804,10 +804,58 @@ function BetVisionPage() {
     if (betsData) setBets(betsData as FantasyBet[])
   }
 
+  // ─── Auto-settle pending bets based on match results ─────────────────────
+  const settleBets = async (u: any) => {
+    try {
+      const { data: pendingBets } = await supabase
+        .from('fantasy_bets')
+        .select('*')
+        .eq('user_id', u.id)
+        .eq('status', 'pending')
+
+      if (!pendingBets || pendingBets.length === 0) return
+
+      for (const bet of pendingBets) {
+        const res = await fetch(`/api/predictions/data?league=${bet.league || 'wc'}`)
+        if (!res.ok) continue
+        const { games } = await res.json()
+        const game = games?.find((g: any) => String(g.id) === String(bet.match_id))
+        if (!game) continue
+
+        const isFinished = ['Final', 'F', 'FT', 'complete'].includes(game.status)
+        if (!isFinished) continue
+
+        const homeScore = parseInt(game.home_team_score ?? game.home_points ?? 0)
+        const awayScore = parseInt(game.away_team_score ?? game.away_points ?? 0)
+
+        let matchResult: 'Home Win' | 'Away Win' | 'Draw'
+        if (homeScore > awayScore) matchResult = 'Home Win'
+        else if (awayScore > homeScore) matchResult = 'Away Win'
+        else matchResult = 'Draw'
+
+        const won = bet.bet_type === matchResult
+        await supabase.from('fantasy_bets').update({ status: won ? 'won' : 'lost' }).eq('id', bet.id)
+
+        if (won) {
+          const { data: acc } = await supabase.from('fantasy_accounts').select('balance, total_won').eq('user_id', u.id).single()
+          if (acc) {
+            await supabase.from('fantasy_accounts').update({
+              balance: parseFloat((acc.balance + bet.potential_win).toFixed(2)),
+              total_won: parseFloat(((acc.total_won || 0) + bet.potential_win).toFixed(2)),
+            }).eq('user_id', u.id)
+          }
+        }
+      }
+      await loadAccount(u)
+    } catch (err) {
+      console.error('Settlement error:', err)
+    }
+  }
+
   // Load account on page load if already logged in
   useEffect(() => {
     if (!user) { setAccount(null); setBets([]); return }
-    loadAccount(user)
+    loadAccount(user).then(() => settleBets(user))
   }, [user])
 
   // After account loads, open the pending bet modal
