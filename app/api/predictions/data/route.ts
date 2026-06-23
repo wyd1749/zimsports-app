@@ -150,7 +150,7 @@ async function fetchFootballGames(leagueCode: string) {
   })
 
   // Always include finished matches with scores for bet settlement
-  const finishedMatches = (finishedJson.matches ?? []).slice(-20)
+  const finishedMatches = (finishedJson.matches ?? [])
   finishedMatches.forEach((m: any) => {
     const { match, homeTeam, awayTeam } = mapMatch(m, 'Final')
     games.push({
