@@ -774,21 +774,31 @@ function BetVisionPage() {
       if (data) {
         setAccount(data)
       } else if (error?.code === 'PGRST116') {
-        // No account yet — create one with $20 starting balance
-        const { data: created, error: createErr } = await supabase
+        // No account yet — wait for trigger to create it, then retry
+        await new Promise(r => setTimeout(r, 1500))
+        const { data: retried } = await supabase
           .from('fantasy_accounts')
-          .insert({
-            user_id: u.id,
-            balance: 20,
-            total_wagered: 0,
-            total_won: 0,
-            display_name: u.user_metadata?.full_name ?? u.email ?? 'Player',
-            avatar_url: u.user_metadata?.avatar_url ?? '',
-          })
-          .select()
+          .select('*')
+          .eq('user_id', u.id)
           .single()
-        if (created) setAccount(created)
-        else console.error('Failed to create account:', createErr)
+        if (retried) {
+          setAccount(retried)
+        } else {
+          // Trigger didn't fire — insert directly as fallback
+          const { data: created } = await supabase
+            .from('fantasy_accounts')
+            .insert({
+              user_id: u.id,
+              balance: 20,
+              total_wagered: 0,
+              total_won: 0,
+              display_name: u.user_metadata?.full_name ?? u.email ?? 'Player',
+              avatar_url: u.user_metadata?.avatar_url ?? '',
+            })
+            .select()
+            .single()
+          if (created) setAccount(created)
+        }
       } else {
         console.error('Failed to load account:', error)
       }
