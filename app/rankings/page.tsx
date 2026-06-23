@@ -4,6 +4,9 @@ import { TrendingUp, Award, Shield, Swords, Trophy } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getRankings } from '@/lib/data'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { fetchLeagueGames, getLeague, type LeagueId } from '@/lib/leagues'
 
 interface RankingsPageProps {

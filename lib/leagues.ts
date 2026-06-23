@@ -75,7 +75,7 @@ export interface ExternalGame {
 async function safeBDLFetch(url: string, bdlKey: string): Promise<any> {
   const res = await fetch(url, {
     headers: { Authorization: bdlKey },
-    next: { revalidate: 300 },
+    next: { revalidate: 60 },
   })
   const text = await res.text()
   if (!res.ok || !text.startsWith('{')) {
@@ -107,14 +107,14 @@ async function fetchFootballData(apiCode: string): Promise<ExternalGame[]> {
   try {
     const finishedRes = await fetch(
       `https://api.football-data.org/v4/competitions/${apiCode}/matches?status=FINISHED`,
-      { headers, next: { revalidate: 300 } }
+      { headers, next: { revalidate: 60 } }
     )
     const finishedJson = await finishedRes.json()
     const recent = (finishedJson.matches ?? []).slice(-10).reverse().map((m: any) => mapMatch(m, 'Final'))
 
     const scheduledRes = await fetch(
       `https://api.football-data.org/v4/competitions/${apiCode}/matches?status=SCHEDULED`,
-      { headers, next: { revalidate: 300 } }
+      { headers, next: { revalidate: 60 } }
     )
     const scheduledJson = await scheduledRes.json()
     const upcoming = (scheduledJson.matches ?? []).slice(0, 6).map((m: any) => mapMatch(m, 'Scheduled'))
@@ -165,11 +165,11 @@ async function fetchApiSportsFootball(leagueId: number): Promise<ExternalGame[]>
     const [upcomingRes, recentRes] = await Promise.all([
       fetch(
         `https://v3.football.api-sports.io/fixtures?league=${leagueId}&season=${currentYear}&status=NS&next=6`,
-        { headers, next: { revalidate: 300 } }
+        { headers, next: { revalidate: 60 } }
       ),
       fetch(
         `https://v3.football.api-sports.io/fixtures?league=${leagueId}&season=${currentYear}&status=FT&last=10`,
-        { headers, next: { revalidate: 300 } }
+        { headers, next: { revalidate: 60 } }
       ),
     ])
 
@@ -185,7 +185,7 @@ async function fetchApiSportsFootball(leagueId: number): Promise<ExternalGame[]>
     if (upcoming.length === 0 && recent.length === 0) {
       const prevRes = await fetch(
         `https://v3.football.api-sports.io/fixtures?league=${leagueId}&season=${currentYear - 1}&status=FT&last=10`,
-        { headers, next: { revalidate: 600 } }
+        { headers, next: { revalidate: 60 } }
       )
       const prevJson = await prevRes.json()
       return (prevJson.response ?? []).map(mapFixture)
