@@ -75,6 +75,9 @@ export default function RootLayout({
           <p style={{ color: '#475569', fontSize: '0.75rem' }}>
             © {new Date().getFullYear()} ZimSports AI · Built in Zimbabwe 🇿🇼
           </p>
+          <p style={{ color: '#475569', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            Developed by <span style={{ color: '#00c8ff' }}>TinasheJMbanje</span> · Contact: 0780501764
+          </p>
         </footer>
 
         {process.env.NODE_ENV === 'production' && <Analytics />}
