@@ -27,8 +27,8 @@ export default function LeagueSwitcher({ currentLeague }: LeagueSwitcherProps) {
     if (dropdownOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       setDropdownPos({
-        top: rect.bottom + window.scrollY + 8,
-        left: rect.left + window.scrollX,
+        top: rect.bottom + 8,
+        left: rect.left,
       })
     }
   }, [dropdownOpen])
