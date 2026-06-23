@@ -107,10 +107,10 @@ async function fetchFootballData(apiCode: string): Promise<ExternalGame[]> {
   try {
     const finishedRes = await fetch(
       `https://api.football-data.org/v4/competitions/${apiCode}/matches?status=FINISHED`,
-      { headers, next: { revalidate: 60 } }
+      { headers, cache: 'no-store' }
     )
     const finishedJson = await finishedRes.json()
-    const recent = (finishedJson.matches ?? []).slice(-10).reverse().map((m: any) => mapMatch(m, 'Final'))
+    const recent = (finishedJson.matches ?? []).map((m: any) => mapMatch(m, 'Final'))
 
     const scheduledRes = await fetch(
       `https://api.football-data.org/v4/competitions/${apiCode}/matches?status=SCHEDULED`,
