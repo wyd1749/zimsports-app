@@ -21,6 +21,28 @@ export const metadata: Metadata = {
   description:
     'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings for Zimbabwe basketball and more.',
   generator: 'zimsports.ai',
+  metadataBase: new URL('https://zimsports-app.vercel.app'),
+  openGraph: {
+    title: 'Zim Sports AI — Analytics & Predictions',
+    description: 'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings.',
+    url: 'https://zimsports-app.vercel.app',
+    siteName: 'Zim Sports AI',
+    images: [
+      {
+        url: '/icon-512.png',
+        width: 512,
+        height: 512,
+        alt: 'Zim Sports AI Logo',
+      },
+    ],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Zim Sports AI — Analytics & Predictions',
+    description: 'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings.',
+    images: ['/icon-512.png'],
+  },
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
