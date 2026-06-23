@@ -149,11 +149,24 @@ async function fetchFootballGames(leagueCode: string) {
     if (awayTeam) teamMap[awayTeam.id] = awayTeam
   })
 
-  // If no scheduled, use last 6 finished matches for AI predictions
-  const finishedMatches = (finishedJson.matches ?? []).slice(-6).reverse()
+  // Always include finished matches with scores for bet settlement
+  const finishedMatches = (finishedJson.matches ?? []).slice(-20)
+  finishedMatches.forEach((m: any) => {
+    const { match, homeTeam, awayTeam } = mapMatch(m, 'Final')
+    games.push({
+      ...match,
+      status: 'Final',
+      home_team_score: m.score?.fullTime?.home ?? m.score?.fullTime?.homeTeam ?? 0,
+      away_team_score: m.score?.fullTime?.away ?? m.score?.fullTime?.awayTeam ?? 0,
+    })
+    if (homeTeam) teamMap[homeTeam.id] = homeTeam
+    if (awayTeam) teamMap[awayTeam.id] = awayTeam
+  })
+
+  // If no scheduled, also show last 6 finished as upcoming for AI predictions
   if (scheduledMatches.length === 0) {
-    finishedMatches.forEach((m: any) => {
-      const { match, homeTeam, awayTeam } = mapMatch(m, 'Final')
+    finishedMatches.slice(-6).reverse().forEach((m: any) => {
+      const { match, homeTeam, awayTeam } = mapMatch(m, 'Scheduled')
       games.push({ ...match, status: 'Scheduled' })
       if (homeTeam) teamMap[homeTeam.id] = homeTeam
       if (awayTeam) teamMap[awayTeam.id] = awayTeam
