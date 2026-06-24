@@ -265,8 +265,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 </div>
               </div>
 
-              {/* Standings */}
-              <StandingsTable standings={standings} />
+              {/* Standings — split by league */}
+              {(() => {
+                const mensStandings    = standings.filter((s: any) => { const l = (s.team?.league ?? s.league ?? '').toLowerCase(); return l !== 'mwl' && l !== 'mutare' })
+                const womensStandings  = standings.filter((s: any) => (s.team?.league ?? s.league ?? '').toLowerCase() === 'mwl')
+                const mutareStandings  = standings.filter((s: any) => (s.team?.league ?? s.league ?? '').toLowerCase() === 'mutare')
+                return (
+                  <div className="space-y-4">
+                    {mensStandings.length > 0 && <StandingsTable standings={mensStandings} title="Men's League" />}
+                    {womensStandings.length > 0 && <StandingsTable standings={womensStandings} title="Women's League" accentColor="oklch(0.80 0.18 350)" />}
+                    {mutareStandings.length > 0 && <StandingsTable standings={mutareStandings} title="Mutare League" accentColor="oklch(0.80 0.20 140)" />}
+                  </div>
+                )
+              })()}
 
               {/* Power rankings promo */}
               <div className="rounded-xl p-4 shimmer overflow-hidden"

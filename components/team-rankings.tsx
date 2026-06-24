@@ -115,6 +115,8 @@ export function TeamRankingCard({ team, stats, rank, className }: TeamRankingCar
 interface StandingsTableProps {
   standings: any[]
   className?: string
+  title?: string
+  accentColor?: string
 }
 
 function isWomensDivision(stat: any): boolean {
@@ -257,7 +259,20 @@ function StandingsSection({ rows, title, accentColor }: StandingsSectionProps) {
   )
 }
 
-export function StandingsTable({ standings, className }: StandingsTableProps) {
+export function StandingsTable({ standings, className, title, accentColor }: StandingsTableProps) {
+  // When called with explicit title/accentColor, render directly (home page splits externally)
+  if (title) {
+    return (
+      <div className={cn('space-y-4', className)}>
+        <StandingsSection
+          rows={standings}
+          title={title}
+          accentColor={accentColor ?? "oklch(0.70 0.22 220)"}
+        />
+      </div>
+    )
+  }
+
   const mensStandings = standings.filter((s) => !isWomensDivision(s))
   const womensStandings = standings.filter((s) => isWomensDivision(s))
 
