@@ -9,7 +9,6 @@ const FOOTBALL_DATA_HEADERS = {
   'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY ?? '',
 }
 
-// All supported football-data.org league codes
 const FOOTBALL_DATA_LEAGUES: Record<string, string> = {
   EPL: 'PL',
   UCL: 'CL',
@@ -25,7 +24,7 @@ const FOOTBALL_DATA_LEAGUES: Record<string, string> = {
   AFCON: 'CAN',
 }
 
-// ─── Safe BDL fetch (handles rate-limit plain-text responses) ─────────────────
+// ─── Safe BDL fetch ───────────────────────────────────────────────────────────
 async function safeBDLFetch(url: string): Promise<any> {
   const res = await fetch(url, { headers: BDL_HEADERS })
   const text = await res.text()
@@ -36,23 +35,17 @@ async function safeBDLFetch(url: string): Promise<any> {
   return JSON.parse(text)
 }
 
-// ─── NBA (BallDontLie) ────────────────────────────────────────────────────────
+// ─── NBA ──────────────────────────────────────────────────────────────────────
 async function fetchNBAGames() {
   const now = new Date()
-  const past = new Date(now); past.setDate(now.getDate() - 7)
   const future = new Date(now); future.setDate(now.getDate() + 14)
   const fmt = (d: Date) => d.toISOString().split('T')[0]
 
-  // Sequential fetches to avoid parallel rate-limit hits
   const upcomingJson = await safeBDLFetch(
     `https://api.balldontlie.io/v1/games?per_page=6&start_date=${fmt(now)}&end_date=${fmt(future)}`
   )
-  await new Promise(r => setTimeout(r, 300))
-  const recentJson = await safeBDLFetch(
-    `https://api.balldontlie.io/v1/games?per_page=6&start_date=${fmt(past)}&end_date=${fmt(now)}`
-  )
 
-  let games = [...(upcomingJson.data ?? []), ...(recentJson.data ?? [])]
+  let games = upcomingJson.data ?? []
 
   if (games.length === 0) {
     await new Promise(r => setTimeout(r, 300))
@@ -62,7 +55,6 @@ async function fetchNBAGames() {
     games = fallbackJson.data ?? []
   }
 
-  // Deduplicate by game ID
   const seen = new Set<number>()
   games = games.filter((g: any) => {
     if (seen.has(g.id)) return false
@@ -83,7 +75,7 @@ async function fetchNBAGames() {
   return { games: normalised.filter((g: any) => g.status !== 'Final'), teams: Object.values(teamMap) }
 }
 
-// ─── MBA (Supabase) ───────────────────────────────────────────────────────────
+// ─── MBA ──────────────────────────────────────────────────────────────────────
 async function fetchMBAGames() {
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const now = new Date().toISOString()
@@ -109,7 +101,58 @@ async function fetchMBAGames() {
   }
 }
 
-// ─── Football (all football-data.org leagues) ─────────────────────────────────
+// ─── Fetch standings to get real wins/losses ──────────────────────────────────
+async function fetchStandings(competitionId: string): Promise<Record<string, { wins: string; losses: string; played: string }>> {
+  try {
+    const res = await fetch(
+      `https://api.football-data.org/v4/competitions/${competitionId}/standings`,
+      { headers: FOOTBALL_DATA_HEADERS }
+    )
+    if (!res.ok) return {}
+    const json = await res.json()
+
+    const standingsMap: Record<string, { wins: string; losses: string; played: string }> = {}
+
+    // standings can be an array of tables (groups, total, home, away)
+    const tables = json.standings ?? []
+    for (const table of tables) {
+      if (table.type === 'TOTAL' || tables.length === 1) {
+        for (const entry of table.standings ?? []) {
+          const teamId = String(entry.team?.id)
+          if (teamId) {
+            standingsMap[teamId] = {
+              wins: String(entry.won ?? 0),
+              losses: String(entry.lost ?? 0),
+              played: String(entry.playedGames ?? 0),
+            }
+          }
+        }
+        break
+      }
+    }
+
+    // If no TOTAL table found, use first table
+    if (Object.keys(standingsMap).length === 0 && tables.length > 0) {
+      for (const entry of tables[0].standings ?? []) {
+        const teamId = String(entry.team?.id)
+        if (teamId) {
+          standingsMap[teamId] = {
+            wins: String(entry.won ?? 0),
+            losses: String(entry.lost ?? 0),
+            played: String(entry.playedGames ?? 0),
+          }
+        }
+      }
+    }
+
+    return standingsMap
+  } catch (err) {
+    console.warn('fetchStandings failed:', err)
+    return {}
+  }
+}
+
+// ─── Football ─────────────────────────────────────────────────────────────────
 async function fetchFootballGames(leagueCode: string) {
   const competitionId = FOOTBALL_DATA_LEAGUES[leagueCode]
   if (!competitionId) throw new Error(`Unknown football league: ${leagueCode}`)
@@ -126,24 +169,33 @@ async function fetchFootballGames(leagueCode: string) {
         venue: m.venue ?? ht?.name ?? '',
         status,
       },
-      homeTeam: ht ? { id: String(ht.id), name: ht.name ?? ht.shortName, abbreviation: ht.tla ?? ht.shortName?.slice(0, 3).toUpperCase() ?? '???', wins: '0', losses: '0' } : null,
-      awayTeam: at ? { id: String(at.id), name: at.name ?? at.shortName, abbreviation: at.tla ?? at.shortName?.slice(0, 3).toUpperCase() ?? '???', wins: '0', losses: '0' } : null,
+      homeTeam: ht ? {
+        id: String(ht.id),
+        name: ht.name ?? ht.shortName,
+        abbreviation: ht.tla ?? ht.shortName?.slice(0, 3).toUpperCase() ?? '???',
+        wins: '0', losses: '0',
+      } : null,
+      awayTeam: at ? {
+        id: String(at.id),
+        name: at.name ?? at.shortName,
+        abbreviation: at.tla ?? at.shortName?.slice(0, 3).toUpperCase() ?? '???',
+        wins: '0', losses: '0',
+      } : null,
     }
   }
 
-  // Fetch both scheduled and finished in parallel
-  const [scheduledRes, finishedRes] = await Promise.all([
+  // Fetch scheduled matches and standings in parallel
+  const [scheduledRes, standingsMap] = await Promise.all([
     fetch(`https://api.football-data.org/v4/competitions/${competitionId}/matches?status=SCHEDULED`, { headers: FOOTBALL_DATA_HEADERS }),
-    fetch(`https://api.football-data.org/v4/competitions/${competitionId}/matches?status=FINISHED`, { headers: FOOTBALL_DATA_HEADERS }),
+    fetchStandings(competitionId),
   ])
 
-  const [scheduledJson, finishedJson] = await Promise.all([scheduledRes.json(), finishedRes.json()])
+  const scheduledJson = await scheduledRes.json()
 
   const teamMap: Record<string, any> = {}
   const games: any[] = []
 
-  // Add upcoming scheduled matches first
-  const scheduledMatches = (scheduledJson.matches ?? []).slice(0, 6)
+  const scheduledMatches = (scheduledJson.matches ?? []).slice(0, 8)
   scheduledMatches.forEach((m: any) => {
     const { match, homeTeam, awayTeam } = mapMatch(m, 'Scheduled')
     games.push(match)
@@ -151,24 +203,17 @@ async function fetchFootballGames(leagueCode: string) {
     if (awayTeam) teamMap[awayTeam.id] = awayTeam
   })
 
-  // Always include finished matches with scores for bet settlement
-  const finishedMatches = (finishedJson.matches ?? [])
-  finishedMatches.forEach((m: any) => {
-    const { match, homeTeam, awayTeam } = mapMatch(m, 'Final')
-    games.push({
-      ...match,
-      status: 'Final',
-      home_team_score: m.score?.fullTime?.home ?? m.score?.fullTime?.homeTeam ?? 0,
-      away_team_score: m.score?.fullTime?.away ?? m.score?.fullTime?.awayTeam ?? 0,
-    })
-    if (homeTeam) teamMap[homeTeam.id] = homeTeam
-    if (awayTeam) teamMap[awayTeam.id] = awayTeam
-  })
+  // Enrich teams with real standings data
+  for (const teamId of Object.keys(teamMap)) {
+    const standing = standingsMap[teamId]
+    if (standing) {
+      teamMap[teamId].wins = standing.wins
+      teamMap[teamId].losses = standing.losses
+      teamMap[teamId].played = standing.played
+    }
+  }
 
-  // Only return scheduled (upcoming) games for predictions
-  const upcomingOnly = games.filter((g: any) => g.status !== 'Final')
-
-  return { games: upcomingOnly, teams: Object.values(teamMap) }
+  return { games, teams: Object.values(teamMap) }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
