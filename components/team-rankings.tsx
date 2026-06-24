@@ -117,10 +117,30 @@ interface StandingsTableProps {
   className?: string
 }
 
-export function StandingsTable({ standings, className }: StandingsTableProps) {
+function isWomensDivision(stat: any): boolean {
+  const division: string = (stat.team?.division ?? stat.division ?? '').toLowerCase()
+  const name: string = (stat.team?.name ?? stat.name ?? '').toLowerCase()
+  return (
+    division.includes('women') ||
+    division.includes('mwl') ||
+    division.includes('ladies') ||
+    name.includes('queens') ||
+    name.includes('ladies') ||
+    name.includes('women')
+  )
+}
+
+interface StandingsSectionProps {
+  rows: any[]
+  title: string
+  accentColor: string
+}
+
+function StandingsSection({ rows, title, accentColor }: StandingsSectionProps) {
+  if (rows.length === 0) return null
   return (
     <div
-      className={cn('rounded-xl overflow-hidden', className)}
+      className="rounded-xl overflow-hidden"
       style={{
         background: 'oklch(0.13 0.03 240 / 0.7)',
         backdropFilter: 'blur(16px)',
@@ -128,18 +148,31 @@ export function StandingsTable({ standings, className }: StandingsTableProps) {
         border: '1px solid oklch(0.60 0.15 220 / 0.18)',
       }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3"
-        style={{ borderBottom: '1px solid oklch(0.60 0.15 220 / 0.12)' }}>
-        <Trophy className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-bold tracking-wide uppercase text-muted-foreground">League Standings</h3>
+      {/* Section header */}
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        style={{ borderBottom: '1px solid oklch(0.60 0.15 220 / 0.12)' }}
+      >
+        <Trophy className="h-4 w-4" style={{ color: accentColor }} />
+        <h3 className="text-sm font-bold tracking-wide uppercase text-muted-foreground">{title}</h3>
+        <span
+          className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
+          style={{ background: `${accentColor}22`, color: accentColor }}
+        >
+          {rows.length} Teams
+        </span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ background: 'oklch(0.11 0.02 240 / 0.5)', borderBottom: '1px solid oklch(0.60 0.15 220 / 0.1)' }}
-              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <tr
+              style={{
+                background: 'oklch(0.11 0.02 240 / 0.5)',
+                borderBottom: '1px solid oklch(0.60 0.15 220 / 0.1)',
+              }}
+              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
               <th className="px-4 py-2.5 text-left">#</th>
               <th className="px-4 py-2.5 text-left">Team</th>
               <th className="px-4 py-2.5 text-center">P</th>
@@ -152,7 +185,7 @@ export function StandingsTable({ standings, className }: StandingsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {standings.map((stat, index) => (
+            {rows.map((stat, index) => (
               <tr
                 key={stat.team?.id ?? stat.id ?? index}
                 className="transition-colors"
@@ -198,12 +231,22 @@ export function StandingsTable({ standings, className }: StandingsTableProps) {
                   {stat.losses}
                 </td>
 
-                <td className="px-4 py-3 text-center text-xs text-muted-foreground hidden sm:table-cell">{stat.points_for}</td>
-                <td className="px-4 py-3 text-center text-xs text-muted-foreground hidden sm:table-cell">{stat.points_against}</td>
+                <td className="px-4 py-3 text-center text-xs text-muted-foreground hidden sm:table-cell">
+                  {stat.points_for}
+                </td>
+                <td className="px-4 py-3 text-center text-xs text-muted-foreground hidden sm:table-cell">
+                  {stat.points_against}
+                </td>
 
-                <td className="px-4 py-3 text-center text-xs font-bold"
-                  style={{ color: stat.point_differential > 0 ? 'oklch(0.80 0.20 195)' : 'oklch(0.62 0.22 25)' }}>
-                  {stat.point_differential > 0 ? '+' : ''}{stat.point_differential}
+                <td
+                  className="px-4 py-3 text-center text-xs font-bold"
+                  style={{
+                    color:
+                      stat.point_differential > 0 ? 'oklch(0.80 0.20 195)' : 'oklch(0.62 0.22 25)',
+                  }}
+                >
+                  {stat.point_differential > 0 ? '+' : ''}
+                  {stat.point_differential}
                 </td>
 
                 <td className="px-4 py-3 hidden md:table-cell">
@@ -214,6 +257,39 @@ export function StandingsTable({ standings, className }: StandingsTableProps) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+export function StandingsTable({ standings, className }: StandingsTableProps) {
+  const mensStandings = standings.filter((s) => !isWomensDivision(s))
+  const womensStandings = standings.filter((s) => isWomensDivision(s))
+
+  // If no division data splits them, fall back to showing all together
+  if (womensStandings.length === 0) {
+    return (
+      <div className={cn('space-y-4', className)}>
+        <StandingsSection
+          rows={mensStandings}
+          title="League Standings"
+          accentColor="oklch(0.70 0.22 220)"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn('space-y-6', className)}>
+      <StandingsSection
+        rows={mensStandings}
+        title="Men's League Standings"
+        accentColor="oklch(0.70 0.22 220)"
+      />
+      <StandingsSection
+        rows={womensStandings}
+        title="Women's League Standings"
+        accentColor="oklch(0.80 0.18 350)"
+      />
     </div>
   )
 }
