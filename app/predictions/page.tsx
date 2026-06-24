@@ -73,8 +73,9 @@ function PredictionsPage() {
       const teamMap: Record<string, TeamData> = {}
       ;(teams ?? []).forEach((t: TeamData) => { teamMap[t.id] = t })
 
-      // Set up placeholder predictions (loading state)
-      const initial: AIPrediction[] = (games ?? []).map((g: GameData) => ({
+      // Set up placeholder predictions (loading state) - only unplayed games
+      const upcomingGames = (games ?? []).filter((g: GameData) => g.status !== 'Final')
+      const initial: AIPrediction[] = upcomingGames.map((g: GameData) => ({
         gameId: g.id,
         homeTeam: teamMap[g.home_team_id] || { id: g.home_team_id, name: 'Home Team', abbreviation: 'HM', wins: '0', losses: '0' },
         awayTeam: teamMap[g.away_team_id] || { id: g.away_team_id, name: 'Away Team', abbreviation: 'AW', wins: '0', losses: '0' },

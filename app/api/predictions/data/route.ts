@@ -56,7 +56,9 @@ async function fetchNBAGames() {
 
   if (games.length === 0) {
     await new Promise(r => setTimeout(r, 300))
-    const fallbackJson = await safeBDLFetch('https://api.balldontlie.io/v1/games?per_page=12&seasons[]=2024')
+    const fallbackJson = await safeBDLFetch(
+      `https://api.balldontlie.io/v1/games?per_page=12&start_date=${fmt(now)}&end_date=${fmt(future)}`
+    )
     games = fallbackJson.data ?? []
   }
 
@@ -163,17 +165,10 @@ async function fetchFootballGames(leagueCode: string) {
     if (awayTeam) teamMap[awayTeam.id] = awayTeam
   })
 
-  // If no scheduled, also show last 6 finished as upcoming for AI predictions
-  if (scheduledMatches.length === 0) {
-    finishedMatches.slice(-6).reverse().forEach((m: any) => {
-      const { match, homeTeam, awayTeam } = mapMatch(m, 'Scheduled')
-      games.push({ ...match, status: 'Scheduled' })
-      if (homeTeam) teamMap[homeTeam.id] = homeTeam
-      if (awayTeam) teamMap[awayTeam.id] = awayTeam
-    })
-  }
+  // Only return scheduled (upcoming) games for predictions
+  const upcomingOnly = games.filter((g: any) => g.status !== 'Final')
 
-  return { games, teams: Object.values(teamMap) }
+  return { games: upcomingOnly, teams: Object.values(teamMap) }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
