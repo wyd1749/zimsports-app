@@ -118,15 +118,11 @@ interface StandingsTableProps {
 }
 
 function isWomensDivision(stat: any): boolean {
-  const division: string = (stat.team?.division ?? stat.division ?? '').toLowerCase()
-  const name: string = (stat.team?.name ?? stat.name ?? '').toLowerCase()
+  const league: string = (stat.team?.league ?? stat.league ?? stat.team?.division ?? stat.division ?? '').toLowerCase()
   return (
-    division.includes('women') ||
-    division.includes('mwl') ||
-    division.includes('ladies') ||
-    name.includes('queens') ||
-    name.includes('ladies') ||
-    name.includes('women')
+    league.includes('women') ||
+    league.includes('mwl') ||
+    league.includes('ladies')
   )
 }
 
