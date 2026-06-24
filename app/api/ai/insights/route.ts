@@ -3,6 +3,79 @@ import Groq from 'groq-sdk'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
+// ─── API-Sports league IDs ────────────────────────────────────────────────────
+const API_SPORTS_LEAGUE_IDS: Record<string, number> = {
+  EPL: 39,
+  UCL: 2,
+  UEL: 3,
+  ELC: 40,
+  PD: 140,
+  BL1: 78,
+  SA: 135,
+  FL1: 61,
+  DED: 88,
+  PPL: 94,
+  WC: 1,
+  AFCON: 6,
+}
+
+const CURRENT_SEASON = 2024
+
+// ─── Fetch real squad from API-Sports ────────────────────────────────────────
+async function fetchSquad(teamName: string, leagueCode: string): Promise<string[]> {
+  try {
+    const apiKey = process.env.API_SPORTS_KEY
+    if (!apiKey) return []
+
+    const leagueId = API_SPORTS_LEAGUE_IDS[leagueCode]
+    if (!leagueId) return []
+
+    // First search for the team by name to get their API-Sports team ID
+    const searchRes = await fetch(
+      `https://v3.football.api-sports.io/teams?name=${encodeURIComponent(teamName)}&league=${leagueId}&season=${CURRENT_SEASON}`,
+      { headers: { 'x-apisports-key': apiKey } }
+    )
+    if (!searchRes.ok) return []
+    const searchJson = await searchRes.json()
+    const teamId = searchJson?.response?.[0]?.team?.id
+    if (!teamId) {
+      // Try broader search without league filter
+      const broadRes = await fetch(
+        `https://v3.football.api-sports.io/teams?name=${encodeURIComponent(teamName)}`,
+        { headers: { 'x-apisports-key': apiKey } }
+      )
+      if (!broadRes.ok) return []
+      const broadJson = await broadRes.json()
+      const broadTeamId = broadJson?.response?.[0]?.team?.id
+      if (!broadTeamId) return []
+
+      const squadRes = await fetch(
+        `https://v3.football.api-sports.io/players/squads?team=${broadTeamId}`,
+        { headers: { 'x-apisports-key': apiKey } }
+      )
+      if (!squadRes.ok) return []
+      const squadJson = await squadRes.json()
+      const players = squadJson?.response?.[0]?.players ?? []
+      return players.slice(0, 11).map((p: any) => p.name).filter(Boolean)
+    }
+
+    // Fetch squad with team ID
+    const squadRes = await fetch(
+      `https://v3.football.api-sports.io/players/squads?team=${teamId}`,
+      { headers: { 'x-apisports-key': apiKey } }
+    )
+    if (!squadRes.ok) return []
+    const squadJson = await squadRes.json()
+    const players = squadJson?.response?.[0]?.players ?? []
+
+    // Return top 11 players (typically starters)
+    return players.slice(0, 11).map((p: any) => p.name).filter(Boolean)
+  } catch (err) {
+    console.warn('fetchSquad failed for', teamName, err)
+    return []
+  }
+}
+
 function getSport(league: string): 'basketball' | 'football' {
   return league === 'NBA' || league === 'MBA' ? 'basketball' : 'football'
 }
@@ -33,15 +106,25 @@ function buildPrompt(
   sport: 'basketball' | 'football',
   leagueName: string,
   homeWinPct: string,
-  awayWinPct: string
+  awayWinPct: string,
+  homeSquad: string[],
+  awaySquad: string[]
 ): string {
   const homeWins = homeTeam.wins ?? 0
   const homeLosses = homeTeam.losses ?? 0
   const awayWins = awayTeam.wins ?? 0
   const awayLosses = awayTeam.losses ?? 0
 
+  const homeSquadStr = homeSquad.length > 0
+    ? `Current squad: ${homeSquad.join(', ')}`
+    : 'Squad data unavailable — do NOT invent player names'
+
+  const awaySquadStr = awaySquad.length > 0
+    ? `Current squad: ${awaySquad.join(', ')}`
+    : 'Squad data unavailable — do NOT invent player names'
+
   if (sport === 'football') {
-    return `You are a world-class football (soccer) analyst and scout covering the ${leagueName}. You have deep knowledge of every team's current squad, recent form, tactical setup, and key players.
+    return `You are a world-class football analyst covering the ${leagueName}.
 
 MATCH: ${homeTeam.name} (HOME) vs ${awayTeam.name} (AWAY)
 
@@ -49,24 +132,29 @@ STATS:
 - ${homeTeam.name}: ${homeWins}W-${homeLosses}L, ${homeWinPct}% win rate, playing at home
 - ${awayTeam.name}: ${awayWins}W-${awayLosses}L, ${awayWinPct}% win rate, playing away
 
-Using your expert knowledge of these specific teams, provide a deep tactical prediction. You MUST:
-1. Name 2-3 specific KEY PLAYERS for each team who will be decisive (e.g. their top scorer, creative midfielder, defensive anchor)
-2. Describe each team's current FORM and tactical setup (last 5 games trend, pressing style, defensive shape)
-3. Reference any known HEAD-TO-HEAD history or rivalry context
-4. Identify CLUTCH factors — which players perform under pressure, who takes set pieces, who leads the attack
+REAL CURRENT SQUADS (use ONLY these names — never invent others):
+- ${homeTeam.name} — ${homeSquadStr}
+- ${awayTeam.name} — ${awaySquadStr}
 
-Respond ONLY with a valid JSON object. No markdown, no backticks, no explanation — raw JSON only:
-{"homeWinProbability":55,"awayWinProbability":45,"predictedWinner":"Team Name","confidenceScore":68,"reasoning":"Deep 3-4 sentence analysis mentioning specific player names, current form, tactical matchups, and decisive factors.","keyFactors":["Factor 1","Factor 2","Factor 3","Factor 4","Factor 5"]}
+INSTRUCTIONS:
+1. Pick 2-3 KEY PLAYERS from each team's squad list above who will be decisive
+2. Describe tactical setup, pressing style, defensive shape
+3. Reference head-to-head history if known
+4. Identify set piece takers, key attackers, defensive anchors FROM THE SQUAD LIST ONLY
+5. If squad data is unavailable for a team, analyse tactically without naming players
+
+Respond ONLY with valid JSON — no markdown, no backticks:
+{"homeWinProbability":55,"awayWinProbability":45,"predictedWinner":"${homeTeam.name}","confidenceScore":68,"reasoning":"3-4 sentences with specific player names from the squad lists, tactical analysis, and decisive factors.","keyFactors":["Player name + specific role/impact","Tactical matchup factor","Set piece or dead ball threat","Defensive shape vs attacking style","Home advantage context"]}
 
 Rules:
-- homeWinProbability + awayWinProbability must equal 100
+- homeWinProbability + awayWinProbability = 100
 - predictedWinner must be exactly "${homeTeam.name}" or "${awayTeam.name}"
-- confidenceScore: higher when win% difference is larger (range 50-90)
-- reasoning: MUST mention specific player names from both teams, their current form/recent results, tactical approach, and what will decide the game. 3-4 sentences minimum. Be specific, not generic.
-- keyFactors: exactly 5 specific tactical/player factors — name actual players where possible (e.g. "Salah's pace vs right back", "set piece delivery", "high press vs low block"). Football terms only.`
+- confidenceScore 50-90
+- keyFactors: exactly 5 items, reference real player names from the squad lists above`
   }
 
-  return `You are a world-class NBA basketball analyst and scout covering the ${leagueName}. You have deep knowledge of every team's current roster, recent form, star players, clutch performers, and head-to-head history.
+  // Basketball — MBA/NBA don't use API-Sports squads, keep team-level
+  return `You are a basketball analyst covering the ${leagueName}.
 
 MATCH: ${homeTeam.name} (HOME) vs ${awayTeam.name} (AWAY)
 
@@ -74,21 +162,16 @@ STATS:
 - ${homeTeam.name}: ${homeWins}W-${homeLosses}L, ${homeWinPct}% win rate, playing at home
 - ${awayTeam.name}: ${awayWins}W-${awayLosses}L, ${awayWinPct}% win rate, playing away
 
-Using your expert knowledge of these specific teams and their current rosters, provide a deep analytical prediction. You MUST:
-1. Name 2-3 KEY PLAYERS for each team who will be decisive — their star player, primary scorer, defensive anchor, or playmaker
-2. Describe each team's CURRENT FORM — last 5 games trend, offensive rating, defensive efficiency
-3. Reference any known HEAD-TO-HEAD matchup history or playoff context between these teams
-4. Identify CLUTCH factors — who takes over in the 4th quarter, who hits big shots, who guards the opponent's best player
+Provide a team-level analytical prediction based on win rates, home court advantage, offensive/defensive efficiency, pace of play, and turnover margin. Do NOT invent player names unless you are 100% certain they are on the current roster.
 
-Respond ONLY with a valid JSON object. No markdown, no backticks, no explanation — raw JSON only:
-{"homeWinProbability":65,"awayWinProbability":35,"predictedWinner":"Team Name","confidenceScore":72,"reasoning":"Deep 3-4 sentence analysis mentioning specific player names, current form, matchup advantages, and clutch factors.","keyFactors":["Factor 1","Factor 2","Factor 3","Factor 4","Factor 5"]}
+Respond ONLY with valid JSON — no markdown, no backticks:
+{"homeWinProbability":65,"awayWinProbability":35,"predictedWinner":"${homeTeam.name}","confidenceScore":72,"reasoning":"3-4 sentences on win rates, home court, efficiency metrics, and team momentum.","keyFactors":["Home court advantage and crowd energy","Win rate differential (${homeWinPct}% vs ${awayWinPct}%)","Offensive efficiency and pace","Turnover margin and ball security","Defensive rating and paint protection"]}
 
 Rules:
-- homeWinProbability + awayWinProbability must equal 100
+- homeWinProbability + awayWinProbability = 100
 - predictedWinner must be exactly "${homeTeam.name}" or "${awayTeam.name}"
-- confidenceScore: higher when win% difference is larger (range 50-90)
-- reasoning: MUST mention specific player names from both teams (e.g. Jalen Brunson, Victor Wembanyama), their recent form, key matchup advantages, and what will decide the game. 3-4 sentences minimum. Reference actual player roles, scoring averages, and clutch moments. Be specific and analytical — NOT generic.
-- keyFactors: exactly 5 specific factors — ALWAYS include "turnover margin" and "home court energy", plus 3 others that NAME specific players or matchups (e.g. "Brunson's pick-and-roll creation", "Wembanyama's shot-blocking vs paint scoring", "three-point volume differential"). Basketball terms only.`
+- confidenceScore 50-90
+- keyFactors: exactly 5 items`
 }
 
 export async function POST(request: Request) {
@@ -116,7 +199,20 @@ export async function POST(request: Request) {
     const homeWinPct = homeTotal > 0 ? ((homeWins / homeTotal) * 100).toFixed(1) : '50.0'
     const awayWinPct = awayTotal > 0 ? ((awayWins / awayTotal) * 100).toFixed(1) : '50.0'
 
-    const prompt = buildPrompt(homeTeam, awayTeam, sport, leagueName, homeWinPct, awayWinPct)
+    // Fetch real squads for football leagues
+    let homeSquad: string[] = []
+    let awaySquad: string[] = []
+
+    if (sport === 'football' && API_SPORTS_LEAGUE_IDS[league]) {
+      console.log(`Fetching squads for ${homeTeam.name} vs ${awayTeam.name} (${league})`)
+      ;[homeSquad, awaySquad] = await Promise.all([
+        fetchSquad(homeTeam.name, league),
+        fetchSquad(awayTeam.name, league),
+      ])
+      console.log(`Squads — ${homeTeam.name}: ${homeSquad.length} players, ${awayTeam.name}: ${awaySquad.length} players`)
+    }
+
+    const prompt = buildPrompt(homeTeam, awayTeam, sport, leagueName, homeWinPct, awayWinPct, homeSquad, awaySquad)
 
     console.log(`POST /api/ai/insights — league=${league} sport=${sport}`)
 
@@ -126,7 +222,7 @@ export async function POST(request: Request) {
         model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 800,
-        temperature: 0.5,
+        temperature: 0.4,
       })
     } catch (groqError: any) {
       console.error('Groq API call failed:', groqError?.message)
