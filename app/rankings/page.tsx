@@ -103,6 +103,10 @@ export default async function RankingsPage({ searchParams }: RankingsPageProps) 
   const topDefense = [...rankings].sort((a, b) => b.team.defense_rating - a.team.defense_rating)[0]
   const topForm    = [...rankings].sort((a, b) => b.team.form_rating    - a.team.form_rating)[0]
 
+  // Split MBA rankings by league (MWL = women's)
+  const mensRankings   = isInternal ? rankings.filter(({ team }) => (team.league ?? team.division ?? '').toLowerCase() !== 'mwl') : rankings
+  const womensRankings = isInternal ? rankings.filter(({ team }) => (team.league ?? team.division ?? '').toLowerCase() === 'mwl') : []
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -174,23 +178,49 @@ export default async function RankingsPage({ searchParams }: RankingsPageProps) 
               </Card>
             </div>
 
-            {/* All teams */}
-            <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">All Teams</h2>
-                <Badge variant="outline">{rankings.length} teams</Badge>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {rankings.map(({ team, stats }, index) => (
-                  <TeamRankingCard
-                    key={team.id ?? index}
-                    team={team}
-                    stats={stats}
-                    rank={index + 1}
-                  />
-                ))}
-              </div>
-            </section>
+            {/* Rankings — split men's / women's for MBA, single list for external leagues */}
+            {isInternal ? (
+              <>
+                {mensRankings.length > 0 && (
+                  <section className="mb-8">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">Men&apos;s Rankings</h2>
+                      <Badge variant="outline">{mensRankings.length} teams</Badge>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {mensRankings.map(({ team, stats }, index) => (
+                        <TeamRankingCard key={team.id ?? index} team={team} stats={stats} rank={index + 1} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {womensRankings.length > 0 && (
+                  <section>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">Women&apos;s Rankings</h2>
+                      <Badge variant="outline">{womensRankings.length} teams</Badge>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {womensRankings.map(({ team, stats }, index) => (
+                        <TeamRankingCard key={team.id ?? index} team={team} stats={stats} rank={index + 1} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            ) : (
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">All Teams</h2>
+                  <Badge variant="outline">{rankings.length} teams</Badge>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {rankings.map(({ team, stats }, index) => (
+                    <TeamRankingCard key={team.id ?? index} team={team} stats={stats} rank={index + 1} />
+                  ))}
+                </div>
+              </section>
+            )}
           </>
         )}
       </main>
