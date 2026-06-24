@@ -205,9 +205,15 @@ async function fetchNBAGames(): Promise<ExternalGame[]> {
 
   const now = new Date()
   const todayStr = now.toISOString().split('T')[0]
-  const past = new Date(now); past.setDate(now.getDate() - 7)
+  const past = new Date(now); past.setDate(now.getDate() - 14)
   const future = new Date(now); future.setDate(now.getDate() + 14)
   const fmt = (d: Date) => d.toISOString().split('T')[0]
+
+  // NBA season year = the year the season started
+  // 2025-26 season started Oct 2025, so season param = 2025
+  const month = now.getMonth() + 1 // 1-12
+  const year  = now.getFullYear()
+  const currentSeason = month >= 10 ? year : year - 1
 
   const mapGame = (g: any): ExternalGame => ({
     id: g.id,
@@ -224,21 +230,22 @@ async function fetchNBAGames(): Promise<ExternalGame[]> {
 
   try {
     const upcomingJson = await safeBDLFetch(
-      `https://api.balldontlie.io/v1/games?per_page=6&start_date=${fmt(now)}&end_date=${fmt(future)}`,
+      `https://api.balldontlie.io/v1/games?per_page=6&seasons[]=${currentSeason}&start_date=${fmt(now)}&end_date=${fmt(future)}`,
       bdlKey
     )
     await new Promise(r => setTimeout(r, 300))
     const recentJson = await safeBDLFetch(
-      `https://api.balldontlie.io/v1/games?per_page=6&start_date=${fmt(past)}&end_date=${fmt(now)}`,
+      `https://api.balldontlie.io/v1/games?per_page=12&seasons[]=${currentSeason}&start_date=${fmt(past)}&end_date=${fmt(now)}`,
       bdlKey
     )
 
     let allGames = [...(upcomingJson.data ?? []), ...(recentJson.data ?? [])]
 
+    // Fallback: pull latest games from current season if date range returns nothing
     if (allGames.length === 0) {
       await new Promise(r => setTimeout(r, 300))
       const fallbackJson = await safeBDLFetch(
-        'https://api.balldontlie.io/v1/games?per_page=12&seasons[]=2024',
+        `https://api.balldontlie.io/v1/games?per_page=12&seasons[]=${currentSeason}`,
         bdlKey
       )
       allGames = fallbackJson.data ?? []
