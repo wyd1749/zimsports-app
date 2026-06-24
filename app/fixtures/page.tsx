@@ -93,6 +93,7 @@ export default async function FixturesPage({ searchParams }: FixturesPageProps) 
   const recent = allGames
     .filter((g) => g.status === 'Final' || g.status === 'Live')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 12)
 
   const grouped = upcoming.reduce((acc, game) => {
     const week = game.matchweek ?? 0
