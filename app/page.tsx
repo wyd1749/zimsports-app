@@ -307,7 +307,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   // ── EXTERNAL (EPL / NBA / AFCON / ZIM) layout ──────────────────────────────
   const externalUpcoming = externalGames.filter((g) => g.status === 'Scheduled')
-  const externalRecent   = externalGames.filter((g) => g.status === 'Final' || g.status === 'Live')
+  const externalRecent   = externalGames.filter((g) => g.status === 'Final' || g.status === 'Live').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <div className="min-h-screen bg-background">
