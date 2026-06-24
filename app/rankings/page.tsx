@@ -103,9 +103,10 @@ export default async function RankingsPage({ searchParams }: RankingsPageProps) 
   const topDefense = [...rankings].sort((a, b) => b.team.defense_rating - a.team.defense_rating)[0]
   const topForm    = [...rankings].sort((a, b) => b.team.form_rating    - a.team.form_rating)[0]
 
-  // Split MBA rankings by league (MWL = women's)
-  const mensRankings   = isInternal ? rankings.filter(({ team }) => (team.league ?? team.division ?? '').toLowerCase() !== 'mwl') : rankings
+  // Split MBA rankings by league
+  const mensRankings   = isInternal ? rankings.filter(({ team }) => { const l = (team.league ?? team.division ?? '').toLowerCase(); return l !== 'mwl' && l !== 'mutare' }) : rankings
   const womensRankings = isInternal ? rankings.filter(({ team }) => (team.league ?? team.division ?? '').toLowerCase() === 'mwl') : []
+  const mutareRankings = isInternal ? rankings.filter(({ team }) => (team.league ?? team.division ?? '').toLowerCase() === 'mutare') : []
 
   return (
     <div className="min-h-screen bg-background">
@@ -195,13 +196,26 @@ export default async function RankingsPage({ searchParams }: RankingsPageProps) 
                   </section>
                 )}
                 {womensRankings.length > 0 && (
-                  <section>
+                  <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                       <h2 className="text-lg font-semibold">Women&apos;s Rankings</h2>
                       <Badge variant="outline">{womensRankings.length} teams</Badge>
                     </div>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {womensRankings.map(({ team, stats }, index) => (
+                        <TeamRankingCard key={team.id ?? index} team={team} stats={stats} rank={index + 1} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {mutareRankings.length > 0 && (
+                  <section>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">Mutare League Rankings</h2>
+                      <Badge variant="outline">{mutareRankings.length} teams</Badge>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {mutareRankings.map(({ team, stats }, index) => (
                         <TeamRankingCard key={team.id ?? index} team={team} stats={stats} rank={index + 1} />
                       ))}
                     </div>
