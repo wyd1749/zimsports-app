@@ -90,7 +90,9 @@ export default async function FixturesPage({ searchParams }: FixturesPageProps) 
   // ── External leagues: EPL / UCL / AFCON / NBA ────────────────────────────────
   const allGames = await fetchLeagueGames(leagueId)
   const upcoming = allGames.filter((g) => g.status === 'Scheduled')
-  const recent = allGames.filter((g) => g.status === 'Final' || g.status === 'Live')
+  const recent = allGames
+    .filter((g) => g.status === 'Final' || g.status === 'Live')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   const grouped = upcoming.reduce((acc, game) => {
     const week = game.matchweek ?? 0
