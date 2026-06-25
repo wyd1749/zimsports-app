@@ -115,37 +115,26 @@ function ConfidenceBar({ value }: { value: number }) {
   )
 }
 
-// ─── Email + Password Login / Sign Up Modal ───────────────────────────────────
+// ─── Magic Link Login Modal ──────────────────────────────────────────────────
 function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (user: any) => void }) {
-  const [mode, setMode] = useState<'login' | 'signup'>('signup')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = async () => {
+  const handleSendLink = async () => {
     if (!email.trim()) return setError('Please enter your email.')
-    if (password.length < 6) return setError('Password must be at least 6 characters.')
     setError('')
     setLoading(true)
-
-    if (mode === 'signup') {
-      const { data, error: err } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-      })
-      setLoading(false)
-      if (err) return setError(err.message)
-      if (data.user) onSuccess(data.user)
-    } else {
-      const { data, error: err } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      })
-      setLoading(false)
-      if (err) return setError(err.message)
-      if (data.user) onSuccess(data.user)
-    }
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    setLoading(false)
+    if (err) return setError(err.message)
+    setSent(true)
   }
 
   return (
@@ -159,413 +148,56 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20">
             <Gamepad2 className="h-7 w-7 text-primary" />
           </div>
-          <h2 className="text-lg font-bold">
-            {mode === 'signup' ? 'Join Fantasy Betting' : 'Welcome Back'}
-          </h2>
+          <h2 className="text-lg font-bold">Join Fantasy Betting</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {mode === 'signup'
-              ? <>Start with <span className="text-primary font-semibold">$20 virtual cash</span> — no real money needed</>
-              : 'Sign in to continue placing bets'}
+            Start with <span className="text-primary font-semibold">$20 virtual cash</span> — no real money needed
           </p>
         </div>
 
-        {mode === 'signup' && (
-          <div className="space-y-2 mb-5">
-            {['$20 free virtual balance to start', 'Place bets on live odds', 'Track your P&L dashboard', 'Compete with no risk'].map((f, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm text-foreground">
-                <span className="text-primary font-bold">✓</span> {f}
-              </div>
-            ))}
+        {!sent ? (
+          <>
+            <div className="space-y-2 mb-5">
+              {['$20 free virtual balance to start', 'Place bets on live odds', 'Track your P&L dashboard', 'Compete with no risk'].map((f, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm text-foreground">
+                  <span className="text-primary font-bold">✓</span> {f}
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <input
+                type="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleSendLink()}
+                className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
+              />
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              <Button onClick={handleSendLink} disabled={loading} className="w-full gap-2 font-semibold">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Send Magic Link
+              </Button>
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground mt-4">
+              We'll email you a secure link — no password needed
+            </p>
+          </>
+        ) : (
+          <div className="text-center space-y-3 py-2">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10 border border-green-500/20">
+              <Zap className="h-7 w-7 text-green-400" />
+            </div>
+            <p className="font-semibold text-foreground">Check your inbox!</p>
+            <p className="text-sm text-muted-foreground">
+              We sent a magic link to <span className="text-primary font-medium">{email}</span>. Click it to sign in instantly.
+            </p>
+            <p className="text-xs text-muted-foreground">Didn't get it? Check spam or{' '}
+              <button onClick={() => setSent(false)} className="text-primary underline">try again</button>
+            </p>
           </div>
         )}
-
-        <div className="space-y-3">
-          <input
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={e => { setEmail(e.target.value); setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
-          />
-          <input
-            type="password"
-            placeholder="Password (min 6 characters)"
-            value={password}
-            onChange={e => { setPassword(e.target.value); setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
-          />
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <Button onClick={handleSubmit} disabled={loading} className="w-full gap-2 font-semibold">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-            {mode === 'signup' ? 'Create Account' : 'Sign In'}
-          </Button>
-        </div>
-
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          {mode === 'signup' ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button
-            onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError('') }}
-            className="text-primary underline underline-offset-2"
-          >
-            {mode === 'signup' ? 'Sign in' : 'Sign up'}
-          </button>
-        </p>
-
-        <p className="text-center text-[11px] text-muted-foreground mt-2">
-          Free to play · Virtual money only · No deposits
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ─── Bet Placement Modal ──────────────────────────────────────────────────────
-function BetModal({
-  advice,
-  balance,
-  league,
-  onClose,
-  onBetPlaced,
-}: {
-  advice: BetAdvice
-  balance: number
-  league: string
-  onClose: () => void
-  onBetPlaced: (newBalance: number) => void
-}) {
-  const [selectedOption, setSelectedOption] = useState<'home' | 'draw' | 'away' | null>(null)
-  const [stake, setStake] = useState('')
-  const [placing, setPlacing] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState('')
-
-  const options = [
-    { key: 'home' as const, label: advice.homeTeam, odds: parseFloat(advice.odds.home) },
-    ...(advice.odds.draw ? [{ key: 'draw' as const, label: 'Draw', odds: parseFloat(advice.odds.draw) }] : []),
-    { key: 'away' as const, label: advice.awayTeam, odds: parseFloat(advice.odds.away) },
-  ]
-
-  const selectedOdds = options.find(o => o.key === selectedOption)?.odds ?? 0
-  const stakeNum = parseFloat(stake) || 0
-  const potentialWin = stakeNum * selectedOdds
-  const profit = potentialWin - stakeNum
-
-  const quickStakes = [1, 2, 5, 10].filter(s => s <= balance)
-
-  const handlePlace = async () => {
-    if (!selectedOption || stakeNum <= 0) return setError('Select an outcome and enter a stake.')
-    if (stakeNum > balance) return setError("You don't have enough balance.")
-    if (stakeNum < 0.1) return setError('Minimum stake is $0.10.')
-
-    setError('')
-    setPlacing(true)
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not logged in')
-
-      const selectedLabel = options.find(o => o.key === selectedOption)!.label
-      const betType = selectedOption === 'home' ? 'Home Win' : selectedOption === 'draw' ? 'Draw' : 'Away Win'
-
-      // Insert bet
-      const { error: betErr } = await supabase.from('fantasy_bets').insert({
-        user_id: user.id,
-        match_id: String(advice.gameId),
-        home_team: advice.homeTeam,
-        away_team: advice.awayTeam,
-        league,
-        bet_type: betType,
-        odds: selectedOdds,
-        stake: stakeNum,
-        potential_win: potentialWin,
-        status: 'pending',
-      })
-      if (betErr) throw betErr
-
-      // Deduct balance
-      const newBalance = parseFloat((balance - stakeNum).toFixed(2))
-      const { error: accErr } = await supabase
-        .from('fantasy_accounts')
-        .update({ balance: newBalance })
-        .eq('user_id', user.id)
-      if (accErr) throw accErr
-
-      // Increment total_wagered via rpc (silently ignore if function doesn't exist)
-      try {
-        await supabase.rpc('increment_wagered', { uid: user.id, amount: stakeNum })
-      } catch {
-        // rpc not available — ignore
-      }
-
-      setSuccess(true)
-      onBetPlaced(newBalance)
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to place bet')
-    } finally {
-      setPlacing(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-md rounded-2xl border border-border bg-background shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-secondary/20">
-          <div className="flex items-center gap-2">
-            <Gamepad2 className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">Place Fantasy Bet</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Balance:</span>
-            <span className="text-sm font-bold text-primary">${balance.toFixed(2)}</span>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground ml-1">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-4 space-y-4">
-          {success ? (
-            <div className="py-8 text-center">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20">
-                <Trophy className="h-7 w-7 text-green-400" />
-              </div>
-              <h3 className="font-bold text-lg">Bet Placed!</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                ${stakeNum.toFixed(2)} on <span className="text-foreground font-medium">{options.find(o => o.key === selectedOption)?.label}</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Potential return: <span className="text-green-400 font-semibold">${potentialWin.toFixed(2)}</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-3">New balance: <span className="font-semibold text-foreground">${balance.toFixed(2)}</span></p>
-              <Button onClick={onClose} className="mt-4 w-full" variant="outline">Done</Button>
-            </div>
-          ) : (
-            <>
-              {/* Match */}
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-0.5">{advice.homeTeam} vs {advice.awayTeam}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {new Date(advice.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                </p>
-              </div>
-
-              {/* Outcome selection */}
-              <div>
-                <p className="text-xs font-semibold text-foreground mb-2">Choose outcome</p>
-                <div className={`grid gap-2 ${options.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                  {options.map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setSelectedOption(opt.key)}
-                      className={`rounded-xl border p-3 text-center transition-all ${
-                        selectedOption === opt.key
-                          ? 'border-primary bg-primary/10 shadow-md shadow-primary/10'
-                          : 'border-border bg-secondary/30 hover:border-primary/40'
-                      }`}
-                    >
-                      <p className="text-[10px] text-muted-foreground mb-1 truncate">{opt.label}</p>
-                      <p className="text-base font-bold text-foreground">{opt.odds.toFixed(2)}</p>
-                      <p className="text-[10px] text-muted-foreground">odds</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Stake input */}
-              <div>
-                <p className="text-xs font-semibold text-foreground mb-2">Stake amount</p>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">$</span>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    max={balance}
-                    value={stake}
-                    onChange={e => { setStake(e.target.value); setError('') }}
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-border bg-secondary/30 pl-7 pr-4 py-2.5 text-sm font-semibold focus:outline-none focus:border-primary transition-colors"
-                  />
-                </div>
-                {quickStakes.length > 0 && (
-                  <div className="flex gap-1.5 mt-2">
-                    {quickStakes.map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setStake(String(s))}
-                        className="flex-1 rounded-lg bg-secondary/50 border border-border text-xs font-medium py-1 hover:border-primary/40 transition-colors"
-                      >
-                        ${s}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setStake(balance.toFixed(2))}
-                      className="flex-1 rounded-lg bg-secondary/50 border border-border text-xs font-medium py-1 hover:border-primary/40 transition-colors"
-                    >
-                      Max
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Payout preview */}
-              {stakeNum > 0 && selectedOption && (
-                <div className="rounded-xl bg-secondary/40 border border-border p-3 space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Stake</span>
-                    <span className="font-medium">${stakeNum.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Odds</span>
-                    <span className="font-medium">{selectedOdds.toFixed(2)}x</span>
-                  </div>
-                  <div className="h-px bg-border" />
-                  <div className="flex justify-between text-sm font-semibold">
-                    <span className="text-muted-foreground">Potential return</span>
-                    <span className="text-green-400">${potentialWin.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Profit if win</span>
-                    <span className={profit >= 0 ? 'text-green-400' : 'text-red-400'}>+${profit.toFixed(2)}</span>
-                  </div>
-                </div>
-              )}
-
-              {error && <p className="text-xs text-destructive text-center">{error}</p>}
-
-              <Button
-                onClick={handlePlace}
-                disabled={placing || !selectedOption || stakeNum <= 0}
-                className="w-full font-semibold gap-2"
-              >
-                {placing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />}
-                Place Bet · ${stakeNum > 0 ? stakeNum.toFixed(2) : '0.00'}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Fantasy Dashboard Modal ──────────────────────────────────────────────────
-function DashboardModal({ account, bets, onClose, onSignOut }: {
-  account: FantasyAccount
-  bets: FantasyBet[]
-  onClose: () => void
-  onSignOut: () => void
-}) {
-  const totalBets = bets.length
-  const wonBets = bets.filter(b => b.status === 'won').length
-  const lostBets = bets.filter(b => b.status === 'lost').length
-  const pendingBets = bets.filter(b => b.status === 'pending').length
-  const winRate = totalBets > 0 ? Math.round((wonBets / totalBets) * 100) : 0
-  const totalProfit = account.total_won - account.total_wagered
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-md rounded-2xl border border-border bg-background shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-secondary/20 shrink-0">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">My Fantasy Account</span>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto p-4 space-y-4">
-          {/* Profile */}
-          <div className="flex items-center gap-3">
-            {account.avatar_url
-              ? <img src={account.avatar_url} className="h-10 w-10 rounded-full" alt="avatar" />
-              : <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center"><User className="h-5 w-5 text-primary" /></div>
-            }
-            <div>
-              <p className="font-semibold text-sm">{account.display_name || 'Fantasy Player'}</p>
-              <p className="text-xs text-muted-foreground">Demo Account</p>
-            </div>
-          </div>
-
-          {/* Balance card */}
-          <div className="rounded-xl bg-primary/10 border border-primary/20 p-4">
-            <p className="text-xs text-muted-foreground mb-0.5">Virtual Balance</p>
-            <p className="text-3xl font-bold text-primary">${account.balance.toFixed(2)}</p>
-            <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {totalProfit >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)} overall P&L
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: 'Bets', value: totalBets, color: 'text-foreground' },
-              { label: 'Won', value: wonBets, color: 'text-green-400' },
-              { label: 'Lost', value: lostBets, color: 'text-red-400' },
-            ].map(s => (
-              <div key={s.label} className="rounded-lg bg-secondary/40 border border-border p-3 text-center">
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-secondary/40 border border-border p-3">
-              <p className="text-xs text-muted-foreground mb-0.5">Win Rate</p>
-              <p className="font-bold text-sm">{winRate}%</p>
-            </div>
-            <div className="rounded-lg bg-secondary/40 border border-border p-3">
-              <p className="text-xs text-muted-foreground mb-0.5">Pending</p>
-              <p className="font-bold text-sm">{pendingBets} bets</p>
-            </div>
-          </div>
-
-          {/* Bet history */}
-          {bets.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-foreground mb-2">Recent Bets</p>
-              <div className="space-y-2">
-                {bets.slice(0, 10).map(bet => (
-                  <div key={bet.id} className="rounded-lg bg-secondary/30 border border-border p-3 flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{bet.home_team} vs {bet.away_team}</p>
-                      <p className="text-[10px] text-muted-foreground">{bet.bet_type} · {bet.odds}x</p>
-                      <p className="text-[10px] text-muted-foreground">${bet.stake.toFixed(2)} → ${bet.potential_win.toFixed(2)}</p>
-                    </div>
-                    <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      bet.status === 'won' ? 'bg-green-500/20 text-green-400' :
-                      bet.status === 'lost' ? 'bg-red-500/20 text-red-400' :
-                      'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {bet.status.toUpperCase()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {bets.length === 0 && (
-            <div className="text-center py-4">
-              <Gamepad2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No bets yet — place your first bet!</p>
-            </div>
-          )}
-        </div>
-
-        <div className="shrink-0 border-t border-border p-4">
-          <Button variant="outline" onClick={onSignOut} className="w-full gap-2 text-sm">
-            <LogOut className="h-4 w-4" /> Sign Out
-          </Button>
-        </div>
       </div>
     </div>
   )
