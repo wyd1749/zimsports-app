@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   description:
     'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings for Zimbabwe basketball and more.',
   generator: 'zimsports.ai',
-  metadataBase: new URL('https://www.zimsports-ai.co.zw'), // ✅ fixed
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://zimsports-ai.co.zw'),
   verification: {
     google: 'dYIIB_d0W8h7DS72oT9CGkQJc3MynvY56w', // ✅ added
   },
@@ -32,10 +32,10 @@ export const metadata: Metadata = {
     siteName: 'Zim Sports AI',
     images: [
       {
-        url: 'https://www.zimsports-ai.co.zw/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Zim Sports AI — Analytics & Predictions',
+        url: '/icon-512.png',
+        width: 512,
+        height: 512,
+        alt: 'Zim Sports AI Logo',
       },
     ],
     type: 'website',
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Zim Sports AI — Analytics & Predictions',
     description: 'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings.',
-    images: ['https://www.zimsports-ai.co.zw/og-image.png'],
+    images: ['/icon-512.png'],
   },
   icons: {
     icon: '/favicon.ico',
