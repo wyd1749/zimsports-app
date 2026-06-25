@@ -32,10 +32,10 @@ export const metadata: Metadata = {
     siteName: 'Zim Sports AI',
     images: [
       {
-        url: '/icon-512.png',
-        width: 512,
-        height: 512,
-        alt: 'Zim Sports AI Logo',
+        url: 'https://www.zimsports-ai.co.zw/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Zim Sports AI — Analytics & Predictions',
       },
     ],
     type: 'website',
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Zim Sports AI — Analytics & Predictions',
     description: 'AI-powered sports analytics platform with predictions, fixtures, results, and team rankings.',
-    images: ['/icon-512.png'],
+    images: ['https://www.zimsports-ai.co.zw/og-image.png'],
   },
   icons: {
     icon: '/favicon.ico',
