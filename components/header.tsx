@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: '/fixtures',    label: 'Fixtures',    emoji: '📅' },
   { href: '/predictions', label: 'Predictions', emoji: '🤖' },
   { href: '/results',     label: 'BetVision',   emoji: '💰' },
+  { href: '/league',      label: 'League',      emoji: '🏆' },
   { href: '/rankings',    label: 'Rankings',    emoji: '📊' },
   { href: '/watch',       label: 'Watch Live',  emoji: '📺' },
 ]
