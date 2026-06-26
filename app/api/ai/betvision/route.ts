@@ -21,82 +21,172 @@ function getLeagueName(league: string): string {
   return names[league] ?? league
 }
 
-function buildBetPrompt(
+// ─── Pure code: calculate all analytics — zero Groq tokens ───────────────────
+function calculateAnalytics(
   homeTeam: any,
   awayTeam: any,
   sport: 'basketball' | 'football',
-  leagueName: string,
-  league: string,
-  homeWinPct: string,
-  awayWinPct: string
-): string {
+  league: string
+) {
   const isNeutral = NEUTRAL_VENUE_LEAGUES.has(league)
 
-  const homeWins = Number(homeTeam.wins ?? 0)
+  const homeWins   = Number(homeTeam.wins   ?? 0)
   const homeLosses = Number(homeTeam.losses ?? 0)
-  const homeDraws = Number(homeTeam.draws ?? 0)
-  const homePlayed = Number(homeTeam.played ?? (homeWins + homeLosses + homeDraws))
+  const homeDraws  = Number(homeTeam.draws  ?? 0)
+  const homePlayed = Number(homeTeam.played ?? (homeWins + homeLosses + homeDraws)) || 1
 
-  const awayWins = Number(awayTeam.wins ?? 0)
+  const awayWins   = Number(awayTeam.wins   ?? 0)
   const awayLosses = Number(awayTeam.losses ?? 0)
-  const awayDraws = Number(awayTeam.draws ?? 0)
-  const awayPlayed = Number(awayTeam.played ?? (awayWins + awayLosses + awayDraws))
+  const awayDraws  = Number(awayTeam.draws  ?? 0)
+  const awayPlayed = Number(awayTeam.played ?? (awayWins + awayLosses + awayDraws)) || 1
 
-  const homeRecord = `${homeWins}W-${homeDraws}D-${homeLosses}L in ${homePlayed} games (${homeWinPct}% win rate)`
-  const awayRecord = `${awayWins}W-${awayDraws}D-${awayLosses}L in ${awayPlayed} games (${awayWinPct}% win rate)`
+  const homeWinPct = (homeWins / homePlayed) * 100
+  const awayWinPct = (awayWins / awayPlayed) * 100
+  const homeDrawPct = (homeDraws / homePlayed) * 100
+  const awayDrawPct = (awayDraws / awayPlayed) * 100
 
-  const venueContext = isNeutral
-    ? `VENUE: Neutral ground — NO home advantage. Both teams on equal footing.`
-    : `VENUE: ${homeTeam.name} playing at HOME — home advantage applies.`
+  // Home advantage boost (not applied for neutral venues)
+  const homeAdvantage = isNeutral ? 0 : 8
 
-  const footballStats = isNeutral
-    ? 'win rate differential, games played, draws vs wins ratio, goal scoring form, tournament experience, squad depth, tactical setup'
-    : 'home advantage, win rate differential, games played, pressing intensity, defensive shape, set pieces, counterattack'
+  // Win probability using win% differential + home boost
+  const diff = (homeWinPct + homeAdvantage) - awayWinPct
+  let homeProbability = 50 + diff * 0.4
+  homeProbability = Math.min(85, Math.max(15, homeProbability))
 
-  const basketballStats = isNeutral
-    ? 'win rate differential, games played, offensive efficiency, defensive rating, pace of play, turnover margin'
-    : 'home court advantage, win rate differential, offensive efficiency, rebounding, three-point shooting, turnovers'
+  // Draw probability — higher when teams are evenly matched and in football
+  let drawProbability = 0
+  if (sport === 'football') {
+    const avgDrawPct = (homeDrawPct + awayDrawPct) / 2
+    const evenness = 100 - Math.abs(diff) * 1.2
+    drawProbability = Math.min(35, Math.max(8, avgDrawPct * 0.6 + evenness * 0.15))
+  }
 
-  return `You are an expert sports betting analyst for the ${leagueName}.
+  const awayProbability = Math.max(5, 100 - homeProbability - drawProbability)
 
-MATCH: ${homeTeam.name} vs ${awayTeam.name}
-${venueContext}
+  // Normalise to 100
+  const total = homeProbability + drawProbability + awayProbability
+  const normHome = (homeProbability / total) * 100
+  const normDraw = (drawProbability / total) * 100
+  const normAway = (awayProbability / total) * 100
 
-REAL CURRENT RECORDS:
-- ${homeTeam.name}: ${homeRecord}
-- ${awayTeam.name}: ${awayRecord}
+  // Recommendation
+  let recommendation: 'HOME' | 'AWAY' | 'DRAW' | 'AVOID'
+  let confidence: number
+  if (normHome >= normAway && normHome >= normDraw) {
+    recommendation = 'HOME'; confidence = normHome
+  } else if (normAway > normHome && normAway >= normDraw) {
+    recommendation = 'AWAY'; confidence = normAway
+  } else {
+    recommendation = 'DRAW'; confidence = normDraw
+  }
 
-Analyse this match using the ACTUAL records above. Base your betting advice primarily on these real stats — win rates, games played, draws, losses. ${isNeutral ? 'Do NOT mention home advantage — this is a neutral venue tournament.' : ''}
+  // If confidence too low, mark as AVOID
+  if (confidence < 48) recommendation = 'AVOID'
+  confidence = Math.round(Math.min(90, Math.max(45, confidence)))
 
-Respond ONLY with valid JSON — no markdown, no backticks:
-{
-  "recommendation": "HOME",
-  "confidence": 68,
-  "odds": { "home": "1.85", "draw": "3.40", "away": "4.20" },
-  "valueRating": "HIGH",
-  "reasoning": "2-3 sentences referencing actual records (${homeRecord} vs ${awayRecord}), form differential, and why this bet has value. ${isNeutral ? 'Note this is a neutral venue — no home advantage.' : ''}",
-  "keyStats": ["Win rate: ${homeWinPct}% vs ${awayWinPct}%", "Record: ${homeWins}W-${homeLosses}L vs ${awayWins}W-${awayLosses}L", "Games played: ${homePlayed} vs ${awayPlayed}", "Stat 4", "Stat 5"],
-  "betType": "Match Winner",
-  "riskLevel": "MEDIUM"
+  // Odds: implied probability with margin
+  const margin = 1.06 // bookmaker margin
+  const homeOdds  = (100 / normHome  * margin).toFixed(2)
+  const drawOdds  = sport === 'football' ? (100 / normDraw  * margin).toFixed(2) : null
+  const awayOdds  = (100 / normAway  * margin).toFixed(2)
+
+  // Value & risk
+  const valueRating: 'HIGH' | 'MEDIUM' | 'LOW' =
+    confidence >= 65 ? 'HIGH' : confidence >= 52 ? 'MEDIUM' : 'LOW'
+  const riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' =
+    confidence >= 70 ? 'LOW' : confidence >= 55 ? 'MEDIUM' : 'HIGH'
+
+  // Bet type
+  let betType = 'Match Winner'
+  if (sport === 'football') {
+    if (normDraw > 28) betType = 'Draw No Bet'
+    else if (normHome > 70 || normAway > 70) betType = 'Match Winner'
+    else betType = 'Match Winner'
+  } else {
+    betType = 'Moneyline'
+  }
+
+  // Key stats (pure data — no AI)
+  const homeWinPctStr = homeWinPct.toFixed(1)
+  const awayWinPctStr = awayWinPct.toFixed(1)
+
+  const keyStats = sport === 'football' ? [
+    `Win rate: ${homeTeam.name} ${homeWinPctStr}% vs ${awayTeam.name} ${awayWinPctStr}%`,
+    `Record: ${homeWins}W-${homeDraws}D-${homeLosses}L vs ${awayWins}W-${awayDraws}D-${awayLosses}L`,
+    `Games played: ${homePlayed} vs ${awayPlayed}`,
+    isNeutral ? `Neutral venue — no home advantage` : `Home advantage: +${homeAdvantage}% probability boost`,
+    `Draw likelihood: ${normDraw.toFixed(0)}% based on both teams' draw history`,
+  ] : [
+    `Win rate: ${homeTeam.name} ${homeWinPctStr}% vs ${awayTeam.name} ${awayWinPctStr}%`,
+    `Record: ${homeWins}W-${homeLosses}L vs ${awayWins}W-${awayLosses}L`,
+    `Games played: ${homePlayed} vs ${awayPlayed}`,
+    isNeutral ? `Neutral venue — equal footing` : `Home court advantage: +${homeAdvantage}% probability boost`,
+    `Win probability: ${normHome.toFixed(0)}% home / ${normAway.toFixed(0)}% away`,
+  ]
+
+  return {
+    recommendation,
+    confidence,
+    odds: {
+      home: homeOdds,
+      ...(drawOdds ? { draw: drawOdds } : {}),
+      away: awayOdds,
+    },
+    valueRating,
+    riskLevel,
+    betType,
+    keyStats,
+    // Pass these for the AI reasoning prompt
+    _meta: {
+      homeWinPct: homeWinPctStr,
+      awayWinPct: awayWinPctStr,
+      homeRecord: `${homeWins}W-${homeDraws}D-${homeLosses}L`,
+      awayRecord: `${awayWins}W-${awayDraws}D-${awayLosses}L`,
+      homePlayed,
+      awayPlayed,
+      isNeutral,
+    }
+  }
 }
 
-Rules:
-- recommendation: "HOME", "AWAY", "DRAW" (football only), or "AVOID"
-- confidence: 45-90 based on record difference${isNeutral ? ' only (no home boost)' : ' and home advantage'}
-- odds: realistic decimal odds 1.50-5.00. ${sport === 'basketball' ? 'No draw for basketball.' : 'Include draw for football.'}
-- valueRating: "HIGH" if confidence >= 65, "MEDIUM" if 50-64, "LOW" if < 50
-- riskLevel: "LOW" if confidence >= 70, "MEDIUM" if 55-69, "HIGH" if < 55
-- reasoning: must reference both team names and their actual records
-- keyStats: exactly 5 factors — use ${sport === 'football' ? footballStats : basketballStats}
-- betType: "Match Winner", "Handicap", "Over 2.5 Goals", "Both Teams to Score", or "Moneyline"`
+// ─── Groq: ONLY generates the reasoning text (2-3 sentences) ─────────────────
+async function generateReasoning(
+  homeTeam: any,
+  awayTeam: any,
+  analytics: ReturnType<typeof calculateAnalytics>,
+  leagueName: string
+): Promise<string> {
+  const { _meta: m, recommendation, confidence, betType } = analytics
+
+  const prompt = `You are a sports betting analyst. Write exactly 2-3 sentences of betting reasoning for this match.
+
+Match: ${homeTeam.name} vs ${awayTeam.name} (${leagueName})
+Recommendation: ${recommendation} | Confidence: ${confidence}% | Bet: ${betType}
+${homeTeam.name}: ${m.homeRecord} in ${m.homePlayed} games (${m.homeWinPct}% win rate)
+${awayTeam.name}: ${m.awayRecord} in ${m.awayPlayed} games (${m.awayWinPct}% win rate)
+${m.isNeutral ? 'Neutral venue — no home advantage.' : `${homeTeam.name} playing at home.`}
+
+Write ONLY the reasoning sentences. No JSON, no labels, no preamble. Reference both teams by name and their actual records.`
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 120, // just 2-3 sentences
+      temperature: 0.4,
+    })
+    return completion.choices[0]?.message?.content?.trim() ?? ''
+  } catch (err: any) {
+    // Fallback reasoning if Groq fails — no crash
+    console.warn('Groq reasoning failed, using fallback:', err?.message)
+    const better = recommendation === 'HOME' ? homeTeam.name : recommendation === 'AWAY' ? awayTeam.name : 'a draw'
+    return `${homeTeam.name} (${m.homeWinPct}% win rate) faces ${awayTeam.name} (${m.awayWinPct}% win rate). Based on current records, ${better} looks the stronger pick with ${confidence}% confidence.`
+  }
 }
 
+// ─── Route handler ────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
   try {
-    if (!process.env.GROQ_API_KEY) {
-      return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 })
-    }
-
     const body = await request.json()
     const { homeTeam, awayTeam, league = 'MBA' } = body
 
@@ -107,68 +197,29 @@ export async function POST(request: Request) {
     const sport = getSport(league)
     const leagueName = getLeagueName(league)
 
-    const homeWins = Number(homeTeam.wins ?? 0)
-    const homeLosses = Number(homeTeam.losses ?? 0)
-    const homeDraws = Number(homeTeam.draws ?? 0)
-    const homePlayed = homeWins + homeLosses + homeDraws
-    const awayWins = Number(awayTeam.wins ?? 0)
-    const awayLosses = Number(awayTeam.losses ?? 0)
-    const awayDraws = Number(awayTeam.draws ?? 0)
-    const awayPlayed = awayWins + awayLosses + awayDraws
+    // Step 1: Calculate everything with pure code (no Groq)
+    const analytics = calculateAnalytics(homeTeam, awayTeam, sport, league)
 
-    const homeWinPct = homePlayed > 0 ? ((homeWins / homePlayed) * 100).toFixed(1) : '50.0'
-    const awayWinPct = awayPlayed > 0 ? ((awayWins / awayPlayed) * 100).toFixed(1) : '50.0'
+    // Step 2: Use Groq ONLY for the 2-3 sentence reasoning (max 120 tokens)
+    const reasoning = process.env.GROQ_API_KEY
+      ? await generateReasoning(homeTeam, awayTeam, analytics, leagueName)
+      : `${homeTeam.name} (${analytics._meta.homeWinPct}% win rate) vs ${awayTeam.name} (${analytics._meta.awayWinPct}% win rate). Recommendation based on current season records.`
 
-    const prompt = buildBetPrompt(homeTeam, awayTeam, sport, leagueName, league, homeWinPct, awayWinPct)
-
-    console.log(`POST /api/ai/betvision — league=${league} neutral=${NEUTRAL_VENUE_LEAGUES.has(league)}`)
-
-    let completion
-    try {
-      completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 600,
-        temperature: 0.3,
-      })
-    } catch (groqError: any) {
-      console.error('Groq API call failed:', groqError?.message)
-      return NextResponse.json({ error: 'Groq API call failed' }, { status: 500 })
-    }
-
-    const raw = completion.choices[0]?.message?.content?.trim() || ''
-    const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
-    const jsonMatch = clean.match(/\{[\s\S]*\}/)
-
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 })
-    }
-
-    let result
-    try {
-      result = JSON.parse(jsonMatch[0])
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-    }
+    console.log(`POST /api/ai/betvision — league=${league} rec=${analytics.recommendation} conf=${analytics.confidence}%`)
 
     return NextResponse.json({
-      recommendation: ['HOME', 'AWAY', 'DRAW', 'AVOID'].includes(result.recommendation)
-        ? result.recommendation : 'HOME',
-      confidence: Math.min(90, Math.max(45, Number(result.confidence) || 60)),
-      odds: {
-        home: result.odds?.home ?? '2.00',
-        ...(sport === 'football' && result.odds?.draw ? { draw: result.odds.draw } : {}),
-        away: result.odds?.away ?? '2.00',
-      },
-      valueRating: ['HIGH', 'MEDIUM', 'LOW'].includes(result.valueRating) ? result.valueRating : 'MEDIUM',
-      reasoning: result.reasoning || '',
-      keyStats: Array.isArray(result.keyStats) ? result.keyStats.slice(0, 5) : [],
-      betType: result.betType || 'Match Winner',
-      riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(result.riskLevel) ? result.riskLevel : 'MEDIUM',
+      recommendation: analytics.recommendation,
+      confidence: analytics.confidence,
+      odds: analytics.odds,
+      valueRating: analytics.valueRating,
+      reasoning,
+      keyStats: analytics.keyStats,
+      betType: analytics.betType,
+      riskLevel: analytics.riskLevel,
     })
 
   } catch (error: any) {
-    console.error('POST /api/ai/betvision unhandled error:', error?.message)
+    console.error('POST /api/ai/betvision error:', error?.message)
     return NextResponse.json({ error: 'Failed to generate bet advice' }, { status: 500 })
   }
 }
