@@ -825,37 +825,86 @@ function BetVisionPage() {
 
       if (!pendingBets || pendingBets.length === 0) return
 
+      // Group bets by league to avoid fetching the same league multiple times
+      const leagueMap: Record<string, any[]> = {}
       for (const bet of pendingBets) {
-        const res = await fetch(`/api/predictions/data?league=${bet.league || 'wc'}`)
-        if (!res.ok) continue
-        const { games } = await res.json()
-        const game = games?.find((g: any) => String(g.id) === String(bet.match_id))
-        if (!game) continue
+        const key = (bet.league || 'WC').toUpperCase()
+        if (!leagueMap[key]) leagueMap[key] = []
+        leagueMap[key].push(bet)
+      }
 
-        const isFinished = ['Final', 'F', 'FT', 'complete'].includes(game.status)
-        if (!isFinished) continue
+      for (const [leagueKey, leagueBets] of Object.entries(leagueMap)) {
+        // Fetch completed games for this league from the fixtures API
+        let games: any[] = []
+        try {
+          const res = await fetch(`/api/fixtures?league=${leagueKey}`)
+          if (res.ok) {
+            const json = await res.json()
+            games = json.games ?? json.data ?? []
+          }
+        } catch {}
 
-        const homeScore = parseInt(game.home_team_score ?? game.home_points ?? 0)
-        const awayScore = parseInt(game.away_team_score ?? game.away_points ?? 0)
+        // Also try the predictions data endpoint as fallback
+        if (games.length === 0) {
+          try {
+            const res2 = await fetch(`/api/predictions/data?league=${leagueKey}`)
+            if (res2.ok) {
+              const json2 = await res2.json()
+              games = json2.games ?? json2.data ?? []
+            }
+          } catch {}
+        }
 
-        let matchResult: 'Home Win' | 'Away Win' | 'Draw'
-        if (homeScore > awayScore) matchResult = 'Home Win'
-        else if (awayScore > homeScore) matchResult = 'Away Win'
-        else matchResult = 'Draw'
+        // Filter to only finished games
+        const finishedGames = games.filter((g: any) =>
+          ['Final', 'F', 'FT', 'complete', 'FINISHED'].includes(g.status)
+        )
 
-        const won = bet.bet_type === matchResult
-        await supabase.from('fantasy_bets').update({ status: won ? 'won' : 'lost' }).eq('id', bet.id)
+        for (const bet of leagueBets) {
+          // Try to match by match_id first, then by team names
+          let game = finishedGames.find((g: any) => String(g.id) === String(bet.match_id))
 
-        if (won) {
-          const { data: acc } = await supabase.from('fantasy_accounts').select('balance, total_won').eq('user_id', u.id).single()
-          if (acc) {
-            await supabase.from('fantasy_accounts').update({
-              balance: parseFloat((acc.balance + bet.potential_win).toFixed(2)),
-              total_won: parseFloat(((acc.total_won || 0) + bet.potential_win).toFixed(2)),
-            }).eq('user_id', u.id)
+          if (!game) {
+            // Fallback: match by home/away team name (case-insensitive, partial match)
+            game = finishedGames.find((g: any) => {
+              const gh = (g.home_team_short ?? g.home_team?.name ?? '').toLowerCase()
+              const ga = (g.away_team_short ?? g.away_team?.name ?? '').toLowerCase()
+              const bh = (bet.home_team ?? '').toLowerCase()
+              const ba = (bet.away_team ?? '').toLowerCase()
+              return (gh.includes(bh.slice(0, 4)) || bh.includes(gh.slice(0, 4))) &&
+                     (ga.includes(ba.slice(0, 4)) || ba.includes(ga.slice(0, 4)))
+            })
+          }
+
+          if (!game) continue
+
+          const homeScore = parseInt(game.home_score ?? game.home_team_score ?? game.home_points ?? 0)
+          const awayScore = parseInt(game.away_score ?? game.away_team_score ?? game.away_points ?? 0)
+
+          let matchResult: 'Home Win' | 'Away Win' | 'Draw'
+          if (homeScore > awayScore) matchResult = 'Home Win'
+          else if (awayScore > homeScore) matchResult = 'Away Win'
+          else matchResult = 'Draw'
+
+          const won = bet.bet_type === matchResult
+          await supabase.from('fantasy_bets').update({ status: won ? 'won' : 'lost' }).eq('id', bet.id)
+
+          if (won) {
+            const { data: acc } = await supabase
+              .from('fantasy_accounts')
+              .select('balance, total_won')
+              .eq('user_id', u.id)
+              .single()
+            if (acc) {
+              await supabase.from('fantasy_accounts').update({
+                balance: parseFloat((acc.balance + bet.potential_win).toFixed(2)),
+                total_won: parseFloat(((acc.total_won || 0) + bet.potential_win).toFixed(2)),
+              }).eq('user_id', u.id)
+            }
           }
         }
       }
+
       await loadAccount(u)
     } catch (err) {
       console.error('Settlement error:', err)
