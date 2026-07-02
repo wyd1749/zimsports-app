@@ -265,6 +265,10 @@ export default function BetFantasyLeaguePage() {
               </span>
             </div>
 
+            {/* Scroll wrapper: table degrades to its own horizontal scroll on narrow screens instead of pushing the whole page */}
+            <div className="overflow-x-auto">
+            <div className="min-w-[420px]">
+
             {/* Column labels */}
             <div className="grid grid-cols-[40px_32px_1fr_64px_64px_80px] items-center gap-2 px-4 py-2 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold"
               style={{ borderBottom: '1px solid oklch(0.60 0.15 220 / 0.08)' }}>
@@ -355,6 +359,8 @@ export default function BetFantasyLeaguePage() {
               </div>
             )}
 
+            </div>
+            </div>
             {/* Movement legend */}
             <div className="flex items-center justify-center gap-6 px-4 py-3 text-xs text-muted-foreground"
               style={{ borderTop: '1px solid oklch(0.60 0.15 220 / 0.10)' }}>
