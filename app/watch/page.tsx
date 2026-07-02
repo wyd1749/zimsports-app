@@ -101,7 +101,7 @@ export default function WatchPage() {
           🔴 LIVE &amp; UPCOMING MATCHES
         </h2>
 
-        <div style={{ display: "grid", gridTemplateColumns: selected ? "340px 1fr" : "1fr", gap: "1.5rem" }}>
+        <div className={`watch-grid${selected ? " has-selected" : ""}`} style={{ display: "grid", gap: "1.5rem" }}>
 
           {/* Match List */}
           <div>
